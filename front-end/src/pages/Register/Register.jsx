@@ -38,14 +38,13 @@ const Register = () => {
 
       localStorage.setItem('auth_token', token);
       localStorage.setItem('user_info', JSON.stringify(user));
-      localStorage.setItem('wallet_setup_completed', 'false');
 
       toast.dismiss(loadingToast);
       toast.success('Registrasi berhasil! Yuk buat dompet pertamamu.');
 
       setTimeout(() => {
         navigate('/setup-wallet');
-      }, 1200);
+      }, 900);
     } catch (error) {
       toast.dismiss(loadingToast);
       toast.error(error.response?.data?.message || error.message || 'Registrasi gagal');
@@ -64,65 +63,31 @@ const Register = () => {
           <form onSubmit={handleRegister} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">Nama Lengkap</label>
-              <input
-                type="text"
-                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]"
-                placeholder="Nama..."
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
+              <input type="text" className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]" placeholder="Nama..." value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Email</label>
-              <input
-                type="email"
-                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]"
-                placeholder="Email..."
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <input type="email" className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]" placeholder="Email..." value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Password</label>
-              <input
-                type="password"
-                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]"
-                placeholder="Min. 8 karakter"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <input type="password" className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]" placeholder="Min. 8 karakter" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Konfirmasi Password</label>
-              <input
-                type="password"
-                className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]"
-                placeholder="Ulangi password"
-                value={passwordConfirmation}
-                onChange={(e) => setPasswordConfirmation(e.target.value)}
-                required
-              />
+              <input type="password" className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]" placeholder="Ulangi password" value={passwordConfirmation} onChange={(e) => setPasswordConfirmation(e.target.value)} required />
             </div>
 
-            <button
-              type="submit"
-              className="w-full bg-[#0056b3] text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-blue-700 mt-4 transition-all"
-            >
+            <button type="submit" className="w-full bg-[#0056b3] text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-blue-700 mt-4 transition-all">
               Daftar Sekarang
             </button>
           </form>
         </div>
         <p className="text-center text-gray-500 text-sm mt-6">
-          Sudah punya akun?{' '}
-          <Link to="/" className="text-[#0056b3] font-bold cursor-pointer hover:underline">
-            Masuk di sini
-          </Link>
+          Sudah punya akun? <Link to="/" className="text-[#0056b3] font-bold cursor-pointer hover:underline">Masuk di sini</Link>
         </p>
       </div>
     </div>

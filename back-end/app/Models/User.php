@@ -14,6 +14,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'has_wallet_setup',
     ];
 
     protected $hidden = [
@@ -23,6 +24,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'has_wallet_setup' => 'boolean',
     ];
 
     /* ================= RELATIONS ================= */

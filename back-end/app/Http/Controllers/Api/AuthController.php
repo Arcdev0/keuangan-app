@@ -106,6 +106,8 @@ class AuthController extends Controller
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
+            'has_wallet_setup' => (bool) $user->has_wallet_setup,
+            'wallet_count' => $user->wallets()->count(),
         ];
     }
 }
