@@ -3,54 +3,62 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 
-
 const Register = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [passwordConfirmation, setPasswordConfirmation] = useState(''); // Kolom ke-4
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
+
     if (password !== passwordConfirmation) {
-      // Ganti Swal Error jadi Toast Error
       toast.error('Password tidak cocok!');
       return;
     }
 
-    // Tampilkan loading (efek keren: loading muter-muter)
     const loadingToast = toast.loading('Mendaftarkan akun...');
 
     try {
-      await axios.post('http://127.0.0.1:8000/api/register', {
-        name, email, password, password_confirmation: passwordConfirmation,
+      const response = await axios.post('http://127.0.0.1:8000/api/register', {
+        name,
+        email,
+        password,
+        password_confirmation: passwordConfirmation,
       });
 
-      // Tutup loading, ganti jadi sukses
+      const authData = response.data?.data;
+      const token = authData?.token;
+      const user = authData?.user;
+
+      if (!token || !user) {
+        throw new Error('Data autentikasi dari server tidak lengkap.');
+      }
+
+      localStorage.setItem('auth_token', token);
+      localStorage.setItem('user_info', JSON.stringify(user));
+      localStorage.setItem('wallet_setup_completed', 'false');
+
       toast.dismiss(loadingToast);
-      toast.success('Registrasi Berhasil! Silakan Login.');
+      toast.success('Registrasi berhasil! Yuk buat dompet pertamamu.');
 
       setTimeout(() => {
-        navigate('/');
-      }, 2000);
-
+        navigate('/setup-wallet');
+      }, 1200);
     } catch (error) {
-      // Tutup loading, ganti jadi error
       toast.dismiss(loadingToast);
-      toast.error(error.response?.data?.message || 'Registrasi Gagal');
+      toast.error(error.response?.data?.message || error.message || 'Registrasi gagal');
     }
   };
 
   return (
     <div className="min-h-screen bg-[#f4f7fe] flex flex-col">
-      {/* Header */}
       <div className="bg-[#0056b3] h-48 rounded-b-[40px] p-8 flex flex-col justify-center">
         <h1 className="text-white text-2xl font-bold">Buat Akun Baru</h1>
         <p className="text-blue-100 text-sm">Kelola keuanganmu dengan lebih teratur</p>
       </div>
 
-      {/* Form */}
       <div className="flex-1 px-6 -mt-10 mb-10">
         <div className="bg-white rounded-3xl shadow-xl p-8">
           <form onSubmit={handleRegister} className="space-y-4">
@@ -90,7 +98,6 @@ const Register = () => {
               />
             </div>
 
-            {/* Kolom Konfirmasi Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700">Konfirmasi Password</label>
               <input

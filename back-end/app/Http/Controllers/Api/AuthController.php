@@ -58,7 +58,7 @@ class AuthController extends Controller
             ]);
         }
 
-        $user = $request->user();
+        $user = Auth::user();
 
         // Recommended: 1 device/session only. Remove this if you want multi-device.
         $user->tokens()->delete();

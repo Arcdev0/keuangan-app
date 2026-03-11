@@ -23,8 +23,9 @@ const SetupWallet = () => {
       });
 
       toast.dismiss(loadingToast);
+      localStorage.setItem('wallet_setup_completed', 'true');
       toast.success('Dompet berhasil dibuat!');
-      
+
       // Sukses -> Masuk Dashboard
       navigate('/dashboard');
 
