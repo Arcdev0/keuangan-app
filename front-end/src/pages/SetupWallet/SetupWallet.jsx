@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
 
 const walletTypeOptions = [
   { value: 'cash', label: 'Tunai' },
@@ -45,12 +46,19 @@ const SetupWallet = () => {
     e.preventDefault();
 
     const loadingToast = toast.loading('Menyimpan dompet...');
+    const openingBalance = parseMoneyInput(balance);
+
+    if (moneyInputToNumber(balance) < 0) {
+      toast.dismiss(loadingToast);
+      toast.error('Saldo awal tidak valid.');
+      return;
+    }
 
     try {
       await axios.post('http://127.0.0.1:8000/api/wallets', {
         name,
         type,
-        opening_balance: balance,
+        opening_balance: openingBalance,
       }, authHeader);
 
       toast.dismiss(loadingToast);
@@ -107,7 +115,7 @@ const SetupWallet = () => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Saldo Awal (Rp)</label>
-            <input type="number" min="0" className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="0" required />
+            <input type="text" inputMode="numeric" className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 focus:outline-none focus:border-[#0056b3]" value={balance} onChange={(e) => setBalance(formatMoneyInput(e.target.value))} placeholder="0" required />
           </div>
 
           <button type="submit" className="w-full bg-[#0056b3] text-white font-bold py-3 rounded-2xl shadow-lg hover:bg-blue-700 transition-all">
