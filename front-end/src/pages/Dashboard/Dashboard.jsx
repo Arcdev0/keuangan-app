@@ -7,6 +7,8 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [transactionType, setTransactionType] = useState('Pengeluaran');
 
   const token = localStorage.getItem('auth_token');
   const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
@@ -120,7 +122,7 @@ const Dashboard = () => {
           <button>Riwayat</button>
           <button
             type="button"
-            onClick={() => navigate('/setup-wallet')}
+            onClick={() => setShowTransactionModal(true)}
             className="w-14 h-14 bg-[#0056b3] text-white rounded-full text-3xl -mt-8 shadow-lg"
           >
             +
@@ -129,6 +131,138 @@ const Dashboard = () => {
           <button>Lainnya</button>
         </div>
       </div>
+
+      {showTransactionModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-0 sm:items-center sm:px-4">
+          <div className="w-full max-w-md rounded-t-[18px] bg-white shadow-2xl sm:rounded-[18px]">
+            <div className="relative rounded-t-[18px] bg-[#f4f6fb] px-4 pb-3 pt-7 sm:rounded-t-[18px]">
+              <span className="absolute left-1/2 top-3 h-1 w-10 -translate-x-1/2 rounded-full bg-[#c5cad4]" />
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-gray-900">Tambah Transaksi</h2>
+                <button
+                  type="button"
+                  aria-label="Tutup modal tambah transaksi"
+                  onClick={() => setShowTransactionModal(false)}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-2xl font-light leading-none text-gray-600"
+                >
+                  x
+                </button>
+              </div>
+            </div>
+
+            <form className="space-y-3 rounded-b-[18px] bg-white px-5 pb-3 pt-3">
+              <div>
+                <label className="mb-2 block text-sm text-gray-700">Jenis</label>
+                <div className="grid grid-cols-3 rounded-full bg-[#bfbfbf] p-1">
+                  {['Pengeluaran', 'Pemasukan', 'Transfer'].map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setTransactionType(type)}
+                      className={`h-7 rounded-full text-xs transition ${
+                        transactionType === type
+                          ? 'bg-white font-semibold text-gray-800 shadow-sm'
+                          : 'text-gray-700'
+                      }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-[64px_1fr] items-center gap-2">
+                <label htmlFor="transaction-amount" className="text-sm text-gray-700">
+                  Jumlah
+                </label>
+                <input
+                  id="transaction-amount"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  className="h-8 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-[64px_1fr] items-center gap-2">
+                <label htmlFor="transaction-wallet" className="text-sm text-gray-700">
+                  Dompet
+                </label>
+                <select
+                  id="transaction-wallet"
+                  className="h-8 w-full rounded-lg border border-[#d6dfef] bg-white px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+                  defaultValue={wallets[0]?.id || 'cash'}
+                >
+                  {wallets.length > 0 ? (
+                    wallets.map((wallet) => (
+                      <option key={wallet.id} value={wallet.id}>
+                        {wallet.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="cash">Tunai</option>
+                  )}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-[64px_1fr] items-center gap-2">
+                <label htmlFor="transaction-category" className="text-sm text-gray-700">
+                  Kategori
+                </label>
+                <select
+                  id="transaction-category"
+                  className="h-8 w-full rounded-lg border border-[#d6dfef] bg-white px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+                  defaultValue="Makanan"
+                >
+                  <option>Makanan</option>
+                  <option>Transportasi</option>
+                  <option>Belanja</option>
+                  <option>Tagihan</option>
+                  <option>Gaji</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-[64px_1fr] items-center gap-2">
+                <label htmlFor="transaction-date" className="text-sm text-gray-700">
+                  Tanggal
+                </label>
+                <input
+                  id="transaction-date"
+                  type="date"
+                  className="h-8 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="transaction-note" className="mb-2 block text-sm text-gray-700">
+                  Catatan
+                </label>
+                <textarea
+                  id="transaction-note"
+                  rows="2"
+                  placeholder="Contoh: makan siang di warung..."
+                  className="w-full resize-none rounded-lg border border-[#d6dfef] px-3 py-2 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <div className="grid grid-cols-[68px_1fr] items-center gap-2">
+                <span className="text-sm text-gray-700">Foto / Struk</span>
+                <label className="flex h-8 cursor-pointer items-center justify-center rounded-lg border border-dashed border-[#d6dfef] bg-[#f8f9ff] text-xs font-medium text-[#0b4fa8]">
+                  Upload Foto / File
+                  <input type="file" className="sr-only" />
+                </label>
+              </div>
+
+              <button
+                type="button"
+                className="h-10 w-full rounded-lg bg-[#064da3] text-sm font-bold text-white shadow-sm transition hover:bg-[#004795]"
+              >
+                Simpan Transaksi
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
