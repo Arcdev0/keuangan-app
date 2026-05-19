@@ -24,11 +24,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/wallets', [WalletController::class, 'store']);
 
     Route::get('/budget-categories', [BudgetCategoryController::class, 'index']);
+    Route::post('/budget-categories', [BudgetCategoryController::class, 'store']);
     Route::get('/budgets', [BudgetController::class, 'index']);
     Route::post('/budgets', [BudgetController::class, 'store']);
+    Route::post('/budgets/copy-previous', [BudgetController::class, 'copyPrevious']);
+    Route::delete('/budgets/{budget}', [BudgetController::class, 'destroy']);
 
     Route::get('/transactions', [TransactionController::class, 'index']);
-    Route::post('/transactions/scan-receipt', [TransactionController::class, 'scanReceipt']);
+    Route::post('/transactions/scan-receipt', [TransactionController::class, 'scanReceipt'])
+        ->middleware('throttle:6,1');
     Route::post('/transactions', [TransactionController::class, 'store']);
     Route::get('/transactions/{transaction}', [TransactionController::class, 'show']);
     Route::match(['put', 'patch', 'post'], '/transactions/{transaction}', [TransactionController::class, 'update']);

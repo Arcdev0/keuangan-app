@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class BudgetCategoryController extends Controller
 {
@@ -37,5 +38,33 @@ class BudgetCategoryController extends Controller
                 ->orderBy('name')
                 ->get(),
         ]);
+    }
+
+    public function store(Request $request)
+    {
+        $user = $request->user();
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:120',
+                Rule::unique('budget_categories', 'name')
+                    ->where(fn ($query) => $query
+                        ->where('user_id', $user->id)
+                        ->where('is_active', true)),
+            ],
+        ]);
+
+        $category = $user->budgetCategories()->create([
+            'name' => trim($validated['name']),
+            'icon' => 'tag',
+            'color' => '#0056b3',
+            'is_active' => true,
+        ]);
+
+        return response()->json([
+            'message' => 'Kategori anggaran berhasil dibuat',
+            'data' => $category,
+        ], 201);
     }
 }

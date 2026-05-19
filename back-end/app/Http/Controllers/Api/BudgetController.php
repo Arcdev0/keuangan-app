@@ -32,6 +32,13 @@ class BudgetController extends Controller
         $year = (int) ($validated['year'] ?? now()->year);
         $month = (int) ($validated['month'] ?? now()->month);
 
+        return response()->json([
+            'data' => $this->summary($user, $year, $month),
+        ]);
+    }
+
+    private function ensureDefaultCategories($user): void
+    {
         foreach ($this->defaultCategories as $category) {
             $user->budgetCategories()->firstOrCreate(
                 ['name' => $category['name']],
@@ -42,6 +49,11 @@ class BudgetController extends Controller
                 ]
             );
         }
+    }
+
+    private function summary($user, int $year, int $month): array
+    {
+        $this->ensureDefaultCategories($user);
 
         $categories = BudgetCategory::where('user_id', $user->id)
             ->where('is_active', true)
@@ -77,7 +89,7 @@ class BudgetController extends Controller
                 'category_color' => $category->color,
                 'limit' => $limit,
                 'spent' => $spent,
-                'remaining' => max($limit - $spent, 0),
+                'remaining' => $limit - $spent,
                 'percentage' => $limit > 0 ? min(round(($spent / $limit) * 100), 999) : 0,
             ];
         })->values();
@@ -85,17 +97,15 @@ class BudgetController extends Controller
         $totalLimit = $items->sum('limit');
         $totalSpent = $items->sum('spent');
 
-        return response()->json([
-            'data' => [
-                'period_year' => $year,
-                'period_month' => $month,
-                'total_limit' => $totalLimit,
-                'total_spent' => $totalSpent,
-                'total_remaining' => max($totalLimit - $totalSpent, 0),
-                'percentage' => $totalLimit > 0 ? min(round(($totalSpent / $totalLimit) * 100), 999) : 0,
-                'items' => $items,
-            ],
-        ]);
+        return [
+            'period_year' => $year,
+            'period_month' => $month,
+            'total_limit' => $totalLimit,
+            'total_spent' => $totalSpent,
+            'total_remaining' => $totalLimit - $totalSpent,
+            'percentage' => $totalLimit > 0 ? min(round(($totalSpent / $totalLimit) * 100), 999) : 0,
+            'items' => $items,
+        ];
     }
 
     public function store(Request $request)
@@ -129,5 +139,62 @@ class BudgetController extends Controller
             'message' => 'Anggaran berhasil disimpan',
             'data' => $budget->load('category'),
         ], 201);
+    }
+
+    public function destroy(Request $request, Budget $budget)
+    {
+        if ($budget->user_id !== $request->user()->id) {
+            abort(404);
+        }
+
+        $budget->delete();
+
+        return response()->json([
+            'message' => 'Limit anggaran berhasil dihapus',
+        ]);
+    }
+
+    public function copyPrevious(Request $request)
+    {
+        $user = $request->user();
+        $validated = $request->validate([
+            'period_year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'period_month' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $year = (int) $validated['period_year'];
+        $month = (int) $validated['period_month'];
+        $previousMonth = $month === 1 ? 12 : $month - 1;
+        $previousYear = $month === 1 ? $year - 1 : $year;
+
+        $previousBudgets = Budget::where('user_id', $user->id)
+            ->where('period_year', $previousYear)
+            ->where('period_month', $previousMonth)
+            ->get();
+
+        if ($previousBudgets->isEmpty()) {
+            return response()->json([
+                'message' => 'Belum ada limit anggaran di bulan sebelumnya.',
+            ], 422);
+        }
+
+        foreach ($previousBudgets as $previousBudget) {
+            Budget::updateOrCreate(
+                [
+                    'user_id' => $user->id,
+                    'budget_category_id' => $previousBudget->budget_category_id,
+                    'period_year' => $year,
+                    'period_month' => $month,
+                ],
+                [
+                    'amount' => $previousBudget->amount,
+                ]
+            );
+        }
+
+        return response()->json([
+            'message' => 'Limit bulan sebelumnya berhasil disalin.',
+            'data' => $this->summary($user, $year, $month),
+        ]);
     }
 }

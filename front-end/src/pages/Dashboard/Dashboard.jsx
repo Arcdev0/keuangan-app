@@ -8,6 +8,7 @@ import {
   CalendarDays,
   ChevronRight,
   Clock3,
+  Copy,
   Eye,
   EyeOff,
   FileText,
@@ -25,6 +26,7 @@ import {
   Trash2,
   Users,
   Sun,
+  Tag,
   Target,
   TrendingDown,
   TrendingUp,
@@ -80,6 +82,10 @@ const initialBudgetForm = {
   amount: '',
 };
 
+const initialBudgetCategoryForm = {
+  name: '',
+};
+
 const initialPasswordForm = {
   current_password: '',
   password: '',
@@ -100,15 +106,20 @@ const Dashboard = () => {
   const [showDashboardAmounts, setShowDashboardAmounts] = useState(true);
   const [savingTransaction, setSavingTransaction] = useState(false);
   const [savingBudget, setSavingBudget] = useState(false);
+  const [savingBudgetCategory, setSavingBudgetCategory] = useState(false);
+  const [savingBudgetCopy, setSavingBudgetCopy] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [scanningReceipt, setScanningReceipt] = useState(false);
   const [clockDate, setClockDate] = useState(() => new Date());
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [showBudgetCategoryModal, setShowBudgetCategoryModal] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [selectedBudgetItem, setSelectedBudgetItem] = useState(null);
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [transactionForm, setTransactionForm] = useState(initialTransactionForm);
   const [budgetForm, setBudgetForm] = useState(initialBudgetForm);
+  const [budgetCategoryForm, setBudgetCategoryForm] = useState(initialBudgetCategoryForm);
   const [passwordForm, setPasswordForm] = useState(initialPasswordForm);
   const [attachmentPreview, setAttachmentPreview] = useState('');
 
@@ -274,7 +285,12 @@ const Dashboard = () => {
     });
   }, [historyFilters, transactions]);
 
-  const formatRupiah = (amount) => `Rp${Number(amount || 0).toLocaleString('id-ID')}`;
+  const formatRupiah = (amount) => {
+    const value = Number(amount || 0);
+    const sign = value < 0 ? '-' : '';
+
+    return `${sign}Rp${Math.abs(value).toLocaleString('id-ID')}`;
+  };
   const formatDate = (date) =>
     new Date(date).toLocaleDateString('id-ID', {
       day: '2-digit',
@@ -349,6 +365,60 @@ const Dashboard = () => {
     }));
   };
 
+  const optimizeReceiptImageForOcr = (file) => new Promise((resolve) => {
+    if (!file.type.startsWith('image/')) {
+      resolve(file);
+      return;
+    }
+
+    const imageUrl = URL.createObjectURL(file);
+    const image = new window.Image();
+
+    image.onload = () => {
+      URL.revokeObjectURL(imageUrl);
+
+      const maxWidth = 1800;
+
+      if (image.width <= maxWidth) {
+        resolve(file);
+        return;
+      }
+
+      const scale = maxWidth / image.width;
+      const canvas = document.createElement('canvas');
+      canvas.width = maxWidth;
+      canvas.height = Math.round(image.height * scale);
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        resolve(file);
+        return;
+      }
+
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve(file);
+            return;
+          }
+
+          resolve(new File([blob], `ocr-${file.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }));
+        },
+        'image/jpeg',
+        0.92,
+      );
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(imageUrl);
+      resolve(file);
+    };
+
+    image.src = imageUrl;
+  });
+
   const handleTypeChange = (type) => {
     setTransactionForm((currentForm) => {
       const fromWalletId = currentForm.wallet_id || String(wallets[0]?.id || '');
@@ -413,7 +483,7 @@ const Dashboard = () => {
     }
   };
 
-  const handleFileChange = (event) => {
+  const handleFileChange = async (event) => {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -443,7 +513,8 @@ const Dashboard = () => {
     setAttachmentPreview(file.type.startsWith('image/') ? URL.createObjectURL(file) : '');
 
     if (file.type.startsWith('image/')) {
-      scanReceiptFile(file);
+      const ocrFile = await optimizeReceiptImageForOcr(file);
+      scanReceiptFile(ocrFile);
     }
   };
 
@@ -478,6 +549,7 @@ const Dashboard = () => {
   };
 
   const openBudgetModal = (budgetItem = null) => {
+    setSelectedBudgetItem(budgetItem);
     setBudgetForm({
       budget_category_id: String(budgetItem?.category_id || budgetCategories[0]?.id || ''),
       amount: budgetItem ? formatMoneyInput(budgetItem.limit) : '',
@@ -487,7 +559,13 @@ const Dashboard = () => {
 
   const closeBudgetModal = () => {
     setShowBudgetModal(false);
+    setSelectedBudgetItem(null);
     setBudgetForm(initialBudgetForm);
+  };
+
+  const closeBudgetCategoryModal = () => {
+    setShowBudgetCategoryModal(false);
+    setBudgetCategoryForm(initialBudgetCategoryForm);
   };
 
   const getValidationMessage = (error) => {
@@ -748,6 +826,115 @@ const Dashboard = () => {
     }
   };
 
+  const handleDeleteBudget = async () => {
+    if (!selectedBudgetItem?.budget_id) {
+      toast.error('Limit anggaran belum disimpan.');
+      return;
+    }
+
+    const confirmed = window.confirm('Hapus limit anggaran kategori ini untuk bulan yang dipilih?');
+
+    if (!confirmed) {
+      return;
+    }
+
+    const loadingToast = toast.loading('Menghapus limit anggaran...');
+    setSavingBudget(true);
+
+    try {
+      await axios.delete(`${API_URL}/budgets/${selectedBudgetItem.budget_id}`, authHeaders);
+      toast.dismiss(loadingToast);
+      toast.success('Limit anggaran berhasil dihapus.');
+      closeBudgetModal();
+      await fetchBudgets();
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
+      toast.error(getValidationMessage(error));
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
+  const handleCopyPreviousBudget = async () => {
+    const [year, month] = budgetMonth.split('-');
+    const loadingToast = toast.loading('Menyalin limit bulan sebelumnya...');
+    setSavingBudgetCopy(true);
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/budgets/copy-previous`,
+        {
+          period_year: Number(year),
+          period_month: Number(month),
+        },
+        authHeaders,
+      );
+
+      toast.dismiss(loadingToast);
+      toast.success(response.data?.message || 'Limit bulan sebelumnya berhasil disalin.');
+      setBudgetSummary(response.data?.data || null);
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
+      toast.error(getValidationMessage(error));
+    } finally {
+      setSavingBudgetCopy(false);
+    }
+  };
+
+  const handleSubmitBudgetCategory = async (event) => {
+    event.preventDefault();
+
+    if (!budgetCategoryForm.name.trim()) {
+      toast.error('Nama kategori wajib diisi.');
+      return;
+    }
+
+    const loadingToast = toast.loading('Menyimpan kategori...');
+    setSavingBudgetCategory(true);
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/budget-categories`,
+        {
+          name: budgetCategoryForm.name.trim(),
+        },
+        authHeaders,
+      );
+      const newCategory = response.data?.data;
+
+      toast.dismiss(loadingToast);
+      toast.success('Kategori anggaran berhasil dibuat.');
+      closeBudgetCategoryModal();
+      await Promise.all([fetchBudgetCategories(), fetchBudgets()]);
+
+      if (newCategory?.id) {
+        openBudgetModal({
+          category_id: newCategory.id,
+          category_name: newCategory.name,
+          limit: 0,
+          budget_id: null,
+        });
+      }
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
+      toast.error(getValidationMessage(error));
+    } finally {
+      setSavingBudgetCategory(false);
+    }
+  };
+
   const updatePasswordForm = (field, value) => {
     setPasswordForm((currentForm) => ({
       ...currentForm,
@@ -996,7 +1183,9 @@ const Dashboard = () => {
         </div>
         <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
           <span>{budgetPercentage}% terpakai</span>
-          <span>{dashboardAmount(budgetTotalRemaining)} sisa</span>
+          <span className={budgetTotalRemaining < 0 ? 'font-semibold text-red-600' : ''}>
+            {dashboardAmount(budgetTotalRemaining)} sisa
+          </span>
         </div>
       </section>
 
@@ -1174,9 +1363,14 @@ const Dashboard = () => {
 
     return (
       <div className="px-5 mt-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-900">Anggaran Bulanan</h2>
-          <label className="text-xs font-semibold text-[#0056b3]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Anggaran Bulanan</h2>
+            <p className="mt-1 text-xs text-gray-500">
+              Limit hanya berlaku untuk bulan yang dipilih. Pengeluaran kategori akan mengurangi sisa anggaran.
+            </p>
+          </div>
+          <label className="shrink-0 text-xs font-semibold text-[#0056b3]">
             Atur bulan
             <input
               type="month"
@@ -1185,6 +1379,26 @@ const Dashboard = () => {
               className="sr-only"
             />
           </label>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={handleCopyPreviousBudget}
+            disabled={savingBudgetCopy}
+            className="flex h-10 items-center justify-center gap-2 rounded-lg border border-[#d6dfef] bg-white text-xs font-bold text-[#0056b3] shadow-sm disabled:cursor-not-allowed disabled:text-gray-400"
+          >
+            <Copy size={15} />
+            {savingBudgetCopy ? 'Menyalin...' : 'Salin bulan lalu'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowBudgetCategoryModal(true)}
+            className="flex h-10 items-center justify-center gap-2 rounded-lg border border-[#d6dfef] bg-white text-xs font-bold text-[#0056b3] shadow-sm"
+          >
+            <Tag size={15} />
+            Kategori baru
+          </button>
         </div>
 
         <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -1198,13 +1412,15 @@ const Dashboard = () => {
           </div>
           <div className="h-2 rounded-full bg-[#dfe5f1]">
             <div
-              className="h-2 rounded-full bg-[#0056b3]"
+              className={`h-2 rounded-full ${summary.percentage >= 100 ? 'bg-red-500' : 'bg-[#0056b3]'}`}
               style={{ width: `${Math.min(summary.percentage || 0, 100)}%` }}
             />
           </div>
           <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
             <span>{summary.percentage || 0}% terpakai</span>
-            <span>{formatRupiah(summary.total_remaining)} sisa</span>
+            <span className={Number(summary.total_remaining || 0) < 0 ? 'font-semibold text-red-600' : ''}>
+              {formatRupiah(summary.total_remaining)} sisa
+            </span>
           </div>
         </div>
 
@@ -1236,7 +1452,9 @@ const Dashboard = () => {
                 <span>
                   {formatRupiah(item.spent)} / {formatRupiah(item.limit)}
                 </span>
-                <span>{formatRupiah(item.remaining)} sisa</span>
+                <span className={Number(item.remaining || 0) < 0 ? 'font-semibold text-red-600' : ''}>
+                  {formatRupiah(item.remaining)} sisa
+                </span>
               </div>
             </button>
           ))
@@ -1674,7 +1892,9 @@ const Dashboard = () => {
             <div className="relative rounded-t-[18px] bg-[#f4f6fb] px-4 pb-3 pt-7 sm:rounded-t-[18px]">
               <span className="absolute left-1/2 top-3 h-1 w-10 -translate-x-1/2 rounded-full bg-[#c5cad4]" />
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-gray-900">Atur Anggaran</h2>
+                <h2 className="text-sm font-bold text-gray-900">
+                  {selectedBudgetItem?.budget_id ? 'Edit Anggaran' : 'Atur Anggaran'}
+                </h2>
                 <button
                   type="button"
                   aria-label="Tutup modal anggaran"
@@ -1687,6 +1907,10 @@ const Dashboard = () => {
             </div>
 
             <form onSubmit={handleSubmitBudget} className="space-y-4 rounded-b-[18px] bg-white px-5 pb-5 pt-4">
+              <div className="rounded-xl bg-blue-50 px-3 py-2 text-xs text-[#064da3]">
+                Limit ini hanya berlaku untuk bulan {budgetMonth}. Jika pengeluaran melewati limit, sisa akan tampil minus.
+              </div>
+
               <div>
                 <label htmlFor="budget-category" className="mb-2 block text-sm text-gray-700">
                   Kategori
@@ -1697,6 +1921,7 @@ const Dashboard = () => {
                   onChange={(event) =>
                     setBudgetForm((currentForm) => ({ ...currentForm, budget_category_id: event.target.value }))
                   }
+                  disabled={Boolean(selectedBudgetItem?.budget_id)}
                   className="h-11 w-full rounded-lg border border-[#d6dfef] bg-white px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
                   required
                 >
@@ -1730,6 +1955,76 @@ const Dashboard = () => {
                 className="h-11 w-full rounded-lg bg-[#0056b3] text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
               >
                 {savingBudget ? 'Menyimpan...' : 'Simpan Anggaran'}
+              </button>
+
+              {selectedBudgetItem?.budget_id && (
+                <button
+                  type="button"
+                  onClick={handleDeleteBudget}
+                  disabled={savingBudget}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 text-sm font-bold text-red-600 disabled:cursor-not-allowed disabled:text-red-300"
+                >
+                  <Trash2 size={16} />
+                  Hapus Limit Bulan Ini
+                </button>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showBudgetCategoryModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/35 px-0 sm:items-center sm:px-4"
+          onClick={closeBudgetCategoryModal}
+        >
+          <div
+            className="w-full max-w-md rounded-t-[18px] bg-white shadow-2xl sm:rounded-[18px]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="relative rounded-t-[18px] bg-[#f4f6fb] px-4 pb-3 pt-7 sm:rounded-t-[18px]">
+              <span className="absolute left-1/2 top-3 h-1 w-10 -translate-x-1/2 rounded-full bg-[#c5cad4]" />
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-gray-900">Kategori Anggaran Baru</h2>
+                <button
+                  type="button"
+                  aria-label="Tutup modal kategori"
+                  onClick={closeBudgetCategoryModal}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-2xl font-light leading-none text-gray-600"
+                >
+                  x
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitBudgetCategory} className="space-y-4 rounded-b-[18px] bg-white px-5 pb-5 pt-4">
+              <div className="rounded-xl bg-blue-50 px-3 py-2 text-xs text-[#064da3]">
+                Kategori baru akan muncul di transaksi pengeluaran dan bisa diberi limit bulanan.
+              </div>
+
+              <div>
+                <label htmlFor="budget-category-name" className="mb-2 block text-sm text-gray-700">
+                  Nama kategori
+                </label>
+                <input
+                  id="budget-category-name"
+                  type="text"
+                  placeholder="Contoh: Kesehatan"
+                  value={budgetCategoryForm.name}
+                  onChange={(event) =>
+                    setBudgetCategoryForm((currentForm) => ({ ...currentForm, name: event.target.value }))
+                  }
+                  className="h-11 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingBudgetCategory}
+                className="h-11 w-full rounded-lg bg-[#0056b3] text-sm font-bold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-gray-400"
+              >
+                {savingBudgetCategory ? 'Menyimpan...' : 'Simpan Kategori'}
               </button>
             </form>
           </div>
