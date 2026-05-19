@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { API_URL } from '../utils/api';
+import { API_URL, clearAuthSession } from '../utils/api';
 
 const AuthCheck = () => {
   const navigate = useNavigate();
@@ -24,8 +24,7 @@ const AuthCheck = () => {
         localStorage.setItem('user_info', JSON.stringify(user));
         navigate(user?.has_wallet_setup ? '/dashboard' : '/setup-wallet', { replace: true });
       } catch (error) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user_info');
+        clearAuthSession();
         navigate('/login', { replace: true });
       }
     };

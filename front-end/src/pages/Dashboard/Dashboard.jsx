@@ -31,7 +31,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { API_BASE_URL, API_URL } from '../../utils/api';
+import { API_BASE_URL, API_URL, clearAuthSession, isUnauthorizedError } from '../../utils/api';
 import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
 
 const typeOptions = [
@@ -143,15 +143,31 @@ const Dashboard = () => {
     setBudgetSummary(response.data?.data || null);
   }, [authHeaders, budgetMonth]);
 
+  const handleUnauthorized = useCallback((error) => {
+    if (!isUnauthorizedError(error)) {
+      return false;
+    }
+
+    clearAuthSession();
+    toast.error('Sesi login berakhir. Silakan masuk lagi.');
+    navigate('/login', { replace: true });
+
+    return true;
+  }, [navigate]);
+
   const loadDashboard = useCallback(async () => {
     try {
       await Promise.all([fetchWallets(), fetchTransactions(), fetchBudgetCategories(), fetchBudgets()]);
     } catch (error) {
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error('Gagal memuat data dashboard.');
     } finally {
       setLoading(false);
     }
-  }, [fetchBudgetCategories, fetchBudgets, fetchTransactions, fetchWallets]);
+  }, [fetchBudgetCategories, fetchBudgets, fetchTransactions, fetchWallets, handleUnauthorized]);
 
   useEffect(() => {
     if (!token) {
@@ -387,6 +403,10 @@ const Dashboard = () => {
       toast.success('Struk terbaca. Cek ulang sebelum disimpan.');
     } catch (error) {
       toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error(getValidationMessage(error));
     } finally {
       setScanningReceipt(false);
@@ -523,6 +543,10 @@ const Dashboard = () => {
       const response = await axios.get(`${API_URL}/transactions/${transactionId}`, authHeaders);
       setSelectedTransaction(response.data?.data || null);
     } catch (error) {
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error('Gagal memuat detail transaksi.');
     } finally {
       setLoadingTransactionDetail(false);
@@ -583,6 +607,10 @@ const Dashboard = () => {
       await loadDashboard();
     } catch (error) {
       toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error(getValidationMessage(error));
     }
   };
@@ -664,6 +692,10 @@ const Dashboard = () => {
       await loadDashboard();
     } catch (error) {
       toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error(getValidationMessage(error));
     } finally {
       setSavingTransaction(false);
@@ -706,6 +738,10 @@ const Dashboard = () => {
       await fetchBudgets();
     } catch (error) {
       toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error(getValidationMessage(error));
     } finally {
       setSavingBudget(false);
@@ -737,6 +773,10 @@ const Dashboard = () => {
       setPasswordForm(initialPasswordForm);
     } catch (error) {
       toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error(getValidationMessage(error));
     } finally {
       setSavingPassword(false);
@@ -754,8 +794,7 @@ const Dashboard = () => {
       toast.dismiss(loadingToast);
       toast.error('Sesi diakhiri dari perangkat ini.');
     } finally {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user_info');
+      clearAuthSession();
       navigate('/login');
     }
   };

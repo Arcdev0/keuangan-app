@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useMemo, useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { API_URL } from '../../utils/api';
+import { API_URL, clearAuthSession, isUnauthorizedError } from '../../utils/api';
 import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
 
 const walletTypeOptions = [
@@ -21,18 +21,37 @@ const SetupWallet = () => {
   const navigate = useNavigate();
 
   const token = localStorage.getItem('auth_token');
-  const authHeader = { headers: { Authorization: `Bearer ${token}` } };
+  const authHeader = useMemo(
+    () => ({ headers: { Authorization: `Bearer ${token}` } }),
+    [token],
+  );
 
-  const loadWallets = async () => {
+  const handleUnauthorized = useCallback((error) => {
+    if (!isUnauthorizedError(error)) {
+      return false;
+    }
+
+    clearAuthSession();
+    toast.error('Sesi login berakhir. Silakan masuk lagi.');
+    navigate('/login', { replace: true });
+
+    return true;
+  }, [navigate]);
+
+  const loadWallets = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/wallets`, authHeader);
       setWallets(response.data?.data || []);
     } catch (error) {
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error('Gagal memuat daftar dompet.');
     } finally {
       setLoadingWallets(false);
     }
-  };
+  }, [authHeader, handleUnauthorized]);
 
   useEffect(() => {
     if (!token) {
@@ -41,7 +60,7 @@ const SetupWallet = () => {
     }
 
     loadWallets();
-  }, []);
+  }, [loadWallets, navigate, token]);
 
   const handleAddWallet = async (e) => {
     e.preventDefault();
@@ -71,6 +90,10 @@ const SetupWallet = () => {
       loadWallets();
     } catch (error) {
       toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
       toast.error(error.response?.data?.message || 'Gagal membuat dompet.');
     }
   };
