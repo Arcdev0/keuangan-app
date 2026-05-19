@@ -33,6 +33,7 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import ConfirmationDialog from '../../components/ConfirmationDialog';
 import { API_BASE_URL, API_URL, clearAuthSession, isUnauthorizedError } from '../../utils/api';
 import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
 
@@ -114,6 +115,8 @@ const Dashboard = () => {
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showBudgetCategoryModal, setShowBudgetCategoryModal] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [selectedBudgetItem, setSelectedBudgetItem] = useState(null);
   const [editingTransaction, setEditingTransaction] = useState(null);
@@ -568,6 +571,34 @@ const Dashboard = () => {
     setBudgetCategoryForm(initialBudgetCategoryForm);
   };
 
+  const openConfirmDialog = (options) => {
+    setConfirmDialog(options);
+  };
+
+  const closeConfirmDialog = () => {
+    if (confirmLoading) {
+      return;
+    }
+
+    setConfirmDialog(null);
+  };
+
+  const confirmDialogAction = async () => {
+    if (!confirmDialog?.onConfirm) {
+      setConfirmDialog(null);
+      return;
+    }
+
+    setConfirmLoading(true);
+
+    try {
+      await confirmDialog.onConfirm();
+      setConfirmDialog(null);
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
   const getValidationMessage = (error) => {
     const errors = error.response?.data?.errors;
 
@@ -669,28 +700,30 @@ const Dashboard = () => {
       return;
     }
 
-    const confirmed = window.confirm('Hapus transaksi ini? Saldo dompet akan dikembalikan sesuai efek transaksi.');
+    openConfirmDialog({
+      title: 'Hapus transaksi?',
+      description: 'Saldo dompet akan dikembalikan sesuai efek transaksi ini. Aksi ini tidak bisa dibatalkan.',
+      confirmLabel: 'Hapus',
+      tone: 'danger',
+      onConfirm: async () => {
+        const loadingToast = toast.loading('Menghapus transaksi...');
 
-    if (!confirmed) {
-      return;
-    }
+        try {
+          await axios.delete(`${API_URL}/transactions/${selectedTransaction.id}`, authHeaders);
+          toast.dismiss(loadingToast);
+          toast.success('Transaksi berhasil dihapus.');
+          setSelectedTransaction(null);
+          await loadDashboard();
+        } catch (error) {
+          toast.dismiss(loadingToast);
+          if (handleUnauthorized(error)) {
+            return;
+          }
 
-    const loadingToast = toast.loading('Menghapus transaksi...');
-
-    try {
-      await axios.delete(`${API_URL}/transactions/${selectedTransaction.id}`, authHeaders);
-      toast.dismiss(loadingToast);
-      toast.success('Transaksi berhasil dihapus.');
-      setSelectedTransaction(null);
-      await loadDashboard();
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      if (handleUnauthorized(error)) {
-        return;
-      }
-
-      toast.error(getValidationMessage(error));
-    }
+          toast.error(getValidationMessage(error));
+        }
+      },
+    });
   };
 
   const handleSubmitTransaction = async (event) => {
@@ -832,31 +865,33 @@ const Dashboard = () => {
       return;
     }
 
-    const confirmed = window.confirm('Hapus limit anggaran kategori ini untuk bulan yang dipilih?');
+    openConfirmDialog({
+      title: 'Hapus limit anggaran?',
+      description: 'Limit kategori ini untuk bulan berjalan akan dihapus. Kategorinya tetap ada dan transaksi tidak berubah.',
+      confirmLabel: 'Hapus Limit',
+      tone: 'danger',
+      onConfirm: async () => {
+        const loadingToast = toast.loading('Menghapus limit anggaran...');
+        setSavingBudget(true);
 
-    if (!confirmed) {
-      return;
-    }
+        try {
+          await axios.delete(`${API_URL}/budgets/${selectedBudgetItem.budget_id}`, authHeaders);
+          toast.dismiss(loadingToast);
+          toast.success('Limit anggaran berhasil dihapus.');
+          closeBudgetModal();
+          await fetchBudgets();
+        } catch (error) {
+          toast.dismiss(loadingToast);
+          if (handleUnauthorized(error)) {
+            return;
+          }
 
-    const loadingToast = toast.loading('Menghapus limit anggaran...');
-    setSavingBudget(true);
-
-    try {
-      await axios.delete(`${API_URL}/budgets/${selectedBudgetItem.budget_id}`, authHeaders);
-      toast.dismiss(loadingToast);
-      toast.success('Limit anggaran berhasil dihapus.');
-      closeBudgetModal();
-      await fetchBudgets();
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      if (handleUnauthorized(error)) {
-        return;
-      }
-
-      toast.error(getValidationMessage(error));
-    } finally {
-      setSavingBudget(false);
-    }
+          toast.error(getValidationMessage(error));
+        } finally {
+          setSavingBudget(false);
+        }
+      },
+    });
   };
 
   const handleCopyPreviousBudget = async () => {
@@ -945,33 +980,33 @@ const Dashboard = () => {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Hapus kategori ${selectedBudgetItem.category_name}? Transaksi lama akan dipindahkan ke kategori Lainnya.`,
-    );
+    openConfirmDialog({
+      title: `Hapus kategori ${selectedBudgetItem.category_name}?`,
+      description: 'Transaksi lama tidak akan hilang. Semua transaksi pada kategori ini akan dipindahkan ke Lainnya.',
+      confirmLabel: 'Hapus Kategori',
+      tone: 'danger',
+      onConfirm: async () => {
+        const loadingToast = toast.loading('Menghapus kategori...');
+        setSavingBudget(true);
 
-    if (!confirmed) {
-      return;
-    }
+        try {
+          await axios.delete(`${API_URL}/budget-categories/${selectedBudgetItem.category_id}`, authHeaders);
+          toast.dismiss(loadingToast);
+          toast.success('Kategori berhasil dihapus. Transaksi lama dipindahkan ke Lainnya.');
+          closeBudgetModal();
+          await Promise.all([fetchBudgetCategories(), fetchBudgets(), fetchTransactions()]);
+        } catch (error) {
+          toast.dismiss(loadingToast);
+          if (handleUnauthorized(error)) {
+            return;
+          }
 
-    const loadingToast = toast.loading('Menghapus kategori...');
-    setSavingBudget(true);
-
-    try {
-      await axios.delete(`${API_URL}/budget-categories/${selectedBudgetItem.category_id}`, authHeaders);
-      toast.dismiss(loadingToast);
-      toast.success('Kategori berhasil dihapus. Transaksi lama dipindahkan ke Lainnya.');
-      closeBudgetModal();
-      await Promise.all([fetchBudgetCategories(), fetchBudgets(), fetchTransactions()]);
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      if (handleUnauthorized(error)) {
-        return;
-      }
-
-      toast.error(getValidationMessage(error));
-    } finally {
-      setSavingBudget(false);
-    }
+          toast.error(getValidationMessage(error));
+        } finally {
+          setSavingBudget(false);
+        }
+      },
+    });
   };
 
   const updatePasswordForm = (field, value) => {
@@ -2253,6 +2288,18 @@ const Dashboard = () => {
           </div>
         </div>
       )}
+
+      <ConfirmationDialog
+        open={Boolean(confirmDialog)}
+        title={confirmDialog?.title}
+        description={confirmDialog?.description}
+        confirmLabel={confirmDialog?.confirmLabel}
+        cancelLabel={confirmDialog?.cancelLabel}
+        tone={confirmDialog?.tone}
+        loading={confirmLoading}
+        onCancel={closeConfirmDialog}
+        onConfirm={confirmDialogAction}
+      />
     </div>
   );
 };
