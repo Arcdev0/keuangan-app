@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Keuangan</string>
-    <string name="title_activity_main">Keuangan</string>
+    <string name="app_name">DompetArc</string>
+    <string name="title_activity_main">DompetArc</string>
     <string name="package_name">com.arcdev.keuangan</string>
     <string name="custom_url_scheme">com.arcdev.keuangan</string>
 </resources>
