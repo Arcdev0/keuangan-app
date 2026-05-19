@@ -100,7 +100,7 @@ const Dashboard = () => {
   const [budgetSummary, setBudgetSummary] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [historyFilters, setHistoryFilters] = useState(initialHistoryFilters);
-  const [budgetMonth, setBudgetMonth] = useState(getToday().slice(0, 7));
+  const [budgetMonth] = useState(getToday().slice(0, 7));
   const [loading, setLoading] = useState(true);
   const [loadingTransactionDetail, setLoadingTransactionDetail] = useState(false);
   const [showDashboardAmounts, setShowDashboardAmounts] = useState(true);
@@ -935,6 +935,45 @@ const Dashboard = () => {
     }
   };
 
+  const handleDeleteBudgetCategory = async () => {
+    if (!selectedBudgetItem?.category_id) {
+      return;
+    }
+
+    if (selectedBudgetItem.category_name === 'Lainnya') {
+      toast.error('Kategori Lainnya tidak bisa dihapus.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Hapus kategori ${selectedBudgetItem.category_name}? Transaksi lama akan dipindahkan ke kategori Lainnya.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const loadingToast = toast.loading('Menghapus kategori...');
+    setSavingBudget(true);
+
+    try {
+      await axios.delete(`${API_URL}/budget-categories/${selectedBudgetItem.category_id}`, authHeaders);
+      toast.dismiss(loadingToast);
+      toast.success('Kategori berhasil dihapus. Transaksi lama dipindahkan ke Lainnya.');
+      closeBudgetModal();
+      await Promise.all([fetchBudgetCategories(), fetchBudgets(), fetchTransactions()]);
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      if (handleUnauthorized(error)) {
+        return;
+      }
+
+      toast.error(getValidationMessage(error));
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
   const updatePasswordForm = (field, value) => {
     setPasswordForm((currentForm) => ({
       ...currentForm,
@@ -1363,22 +1402,11 @@ const Dashboard = () => {
 
     return (
       <div className="px-5 mt-5 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-bold text-gray-900">Anggaran Bulanan</h2>
-            <p className="mt-1 text-xs text-gray-500">
-              Limit hanya berlaku untuk bulan yang dipilih. Pengeluaran kategori akan mengurangi sisa anggaran.
-            </p>
-          </div>
-          <label className="shrink-0 text-xs font-semibold text-[#0056b3]">
-            Atur bulan
-            <input
-              type="month"
-              value={budgetMonth}
-              onChange={(event) => setBudgetMonth(event.target.value || getToday().slice(0, 7))}
-              className="sr-only"
-            />
-          </label>
+        <div>
+          <h2 className="text-center text-base font-bold text-gray-900">Anggaran Bulanan</h2>
+          <p className="mx-auto mt-1 max-w-xs text-center text-xs text-gray-500">
+            Limit hanya berlaku untuk bulan ini. Pengeluaran kategori akan mengurangi sisa anggaran.
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -1466,7 +1494,7 @@ const Dashboard = () => {
           className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#0056b3] text-sm font-bold text-white shadow-sm"
         >
           <Plus size={18} />
-          Tambah Anggaran
+          Atur Limit Anggaran
         </button>
       </div>
     );
@@ -1908,7 +1936,7 @@ const Dashboard = () => {
 
             <form onSubmit={handleSubmitBudget} className="space-y-4 rounded-b-[18px] bg-white px-5 pb-5 pt-4">
               <div className="rounded-xl bg-blue-50 px-3 py-2 text-xs text-[#064da3]">
-                Limit ini hanya berlaku untuk bulan {budgetMonth}. Jika pengeluaran melewati limit, sisa akan tampil minus.
+                Limit ini hanya berlaku untuk bulan ini. Jika pengeluaran melewati limit, sisa akan tampil minus.
               </div>
 
               <div>
@@ -1966,6 +1994,18 @@ const Dashboard = () => {
                 >
                   <Trash2 size={16} />
                   Hapus Limit Bulan Ini
+                </button>
+              )}
+
+              {selectedBudgetItem?.category_id && selectedBudgetItem?.category_name !== 'Lainnya' && (
+                <button
+                  type="button"
+                  onClick={handleDeleteBudgetCategory}
+                  disabled={savingBudget}
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-white text-sm font-bold text-red-600 disabled:cursor-not-allowed disabled:text-red-300"
+                >
+                  <Trash2 size={16} />
+                  Hapus Kategori
                 </button>
               )}
             </form>

@@ -85,6 +85,59 @@ class BudgetControllerTest extends TestCase
         ]);
     }
 
+    public function test_user_can_delete_budget_category_and_move_transactions_to_lainnya(): void
+    {
+        $user = User::factory()->create();
+        $category = BudgetCategory::create([
+            'user_id' => $user->id,
+            'name' => 'Kopi',
+            'is_active' => true,
+        ]);
+        $fallback = BudgetCategory::create([
+            'user_id' => $user->id,
+            'name' => 'Lainnya',
+            'is_active' => true,
+        ]);
+        $wallet = Wallet::create([
+            'user_id' => $user->id,
+            'name' => 'Tunai',
+            'type' => 'cash',
+            'opening_balance' => 500000,
+            'current_balance' => 450000,
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+        $transaction = Transaction::create([
+            'user_id' => $user->id,
+            'type' => 'expense',
+            'wallet_id' => $wallet->id,
+            'budget_category_id' => $category->id,
+            'amount' => 50000,
+            'trx_date' => '2026-05-19',
+            'status' => 'completed',
+        ]);
+        Budget::create([
+            'user_id' => $user->id,
+            'budget_category_id' => $category->id,
+            'period_year' => 2026,
+            'period_month' => 5,
+            'amount' => 100000,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->deleteJson("/api/budget-categories/{$category->id}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Kategori berhasil dihapus. Transaksi lama dipindahkan ke Lainnya.');
+
+        $this->assertFalse($category->fresh()->is_active);
+        $this->assertSame($fallback->id, $transaction->fresh()->budget_category_id);
+        $this->assertDatabaseMissing('budgets', [
+            'user_id' => $user->id,
+            'budget_category_id' => $category->id,
+        ]);
+    }
+
     public function test_user_can_delete_budget_limit_without_deleting_category(): void
     {
         $user = User::factory()->create();

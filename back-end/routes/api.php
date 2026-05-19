@@ -25,6 +25,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/budget-categories', [BudgetCategoryController::class, 'index']);
     Route::post('/budget-categories', [BudgetCategoryController::class, 'store']);
+    Route::delete('/budget-categories/{budgetCategory}', [BudgetCategoryController::class, 'destroy']);
     Route::get('/budgets', [BudgetController::class, 'index']);
     Route::post('/budgets', [BudgetController::class, 'store']);
     Route::post('/budgets/copy-previous', [BudgetController::class, 'copyPrevious']);
