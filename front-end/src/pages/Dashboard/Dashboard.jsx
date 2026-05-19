@@ -419,6 +419,11 @@ const Dashboard = () => {
   };
 
   const scanReceiptFile = async (file) => {
+    if (isGuest) {
+      toast.error('Baca struk otomatis tersedia setelah masuk dengan akun online.');
+      return;
+    }
+
     const payload = new FormData();
     payload.append('receipt', file);
 
@@ -426,8 +431,7 @@ const Dashboard = () => {
     setScanningReceipt(true);
 
     try {
-      const scanUrl = isGuest ? `${API_URL}/guest/transactions/scan-receipt` : `${API_URL}/transactions/scan-receipt`;
-      const response = await axios.post(scanUrl, payload, isGuest ? undefined : authHeaders);
+      const response = await axios.post(`${API_URL}/transactions/scan-receipt`, payload, authHeaders);
       const parsed = response.data?.data?.parsed || {};
 
       setTransactionForm((currentForm) => ({
@@ -456,6 +460,12 @@ const Dashboard = () => {
   };
 
   const handleFileChange = (event) => {
+    if (isGuest) {
+      toast.error('Mode tamu tidak mendukung upload gambar atau baca struk otomatis.');
+      event.target.value = '';
+      return;
+    }
+
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -758,7 +768,7 @@ const Dashboard = () => {
       payload.append('budget_category_id', transactionForm.budget_category_id);
     }
 
-    if (transactionForm.attachment) {
+    if (!isGuest && transactionForm.attachment) {
       payload.append('attachment', transactionForm.attachment);
     }
 
@@ -1696,23 +1706,33 @@ const Dashboard = () => {
   );
 
   const renderReceiptUpload = () => (
-    <div className="space-y-2 rounded-2xl border border-dashed border-[#b8c6df] bg-[#f8f9ff] p-3">
+    <div className={`space-y-2 rounded-2xl border border-dashed p-3 ${
+      isGuest ? 'border-amber-200 bg-amber-50' : 'border-[#b8c6df] bg-[#f8f9ff]'
+    }`}>
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-bold text-gray-900">Foto / Struk</p>
           <p className="mt-0.5 text-xs text-gray-500">
-            Upload foto struk, form akan dicoba isi otomatis.
+            {isGuest
+              ? 'Mode tamu menyimpan data di perangkat ini. Upload gambar dan baca struk otomatis tersedia setelah masuk akun online.'
+              : 'Upload foto struk, form akan dicoba isi otomatis.'}
           </p>
         </div>
-        <label className="flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-[#0056b3] px-4 text-xs font-bold text-white active:bg-[#064da3]">
-          {transactionForm.attachment ? 'Ganti' : 'Upload'}
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp,application/pdf"
-            onChange={handleFileChange}
-            className="sr-only"
-          />
-        </label>
+        {isGuest ? (
+          <span className="flex h-10 shrink-0 items-center justify-center rounded-lg border border-amber-200 bg-white px-3 text-xs font-bold text-amber-700">
+            Online saja
+          </span>
+        ) : (
+          <label className="flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-[#0056b3] px-4 text-xs font-bold text-white active:bg-[#064da3]">
+            {transactionForm.attachment ? 'Ganti' : 'Upload'}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              onChange={handleFileChange}
+              className="sr-only"
+            />
+          </label>
+        )}
       </div>
 
       {scanningReceipt && (

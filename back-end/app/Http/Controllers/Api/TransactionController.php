@@ -26,18 +26,6 @@ class TransactionController extends Controller
         ]);
     }
 
-    public function scanGuestReceipt(Request $request, ReceiptOcrService $receiptOcrService)
-    {
-        $validated = $request->validate([
-            'receipt' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
-        ]);
-
-        return response()->json([
-            'message' => 'Struk berhasil dibaca',
-            'data' => $receiptOcrService->scan($validated['receipt']),
-        ]);
-    }
-
     public function index(Request $request)
     {
         $validated = $request->validate([

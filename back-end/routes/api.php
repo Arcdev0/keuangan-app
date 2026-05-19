@@ -15,8 +15,6 @@ Route::middleware('throttle:3,1')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
 });
 
-Route::post('/guest/transactions/scan-receipt', [TransactionController::class, 'scanGuestReceipt']);
-
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me',      [AuthController::class, 'me']);
