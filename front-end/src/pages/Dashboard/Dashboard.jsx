@@ -7,6 +7,7 @@ import {
   BarChart3,
   CalendarDays,
   ChevronRight,
+  CloudUpload,
   Clock3,
   Copy,
   Eye,
@@ -36,7 +37,7 @@ import {
 import ConfirmationDialog from '../../components/ConfirmationDialog';
 import { API_BASE_URL, API_URL, clearAuthSession, isUnauthorizedError } from '../../utils/api';
 import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
-import { guestStorage, isGuestMode } from '../../utils/guestStorage';
+import { clearGuestData, guestStorage, isGuestMode } from '../../utils/guestStorage';
 
 const typeOptions = [
   { label: 'Pengeluaran', value: 'expense' },
@@ -1077,14 +1078,36 @@ const Dashboard = () => {
   };
 
   const handleLogout = async () => {
+    if (isGuest) {
+      openConfirmDialog({
+        title: 'Keluar dari Mode Tamu?',
+        description: 'Semua data lokal mode tamu akan dihapus permanen, termasuk dompet, transaksi, kategori, dan anggaran yang dibuat di perangkat ini.',
+        confirmLabel: 'Hapus & Keluar',
+        cancelLabel: 'Batal',
+        tone: 'danger',
+        onConfirm: async () => {
+          const loadingToast = toast.loading('Menghapus data tamu...');
+
+          try {
+            await clearGuestData();
+            toast.dismiss(loadingToast);
+            toast.success('Data tamu berhasil dihapus.');
+            navigate('/login');
+          } catch (error) {
+            toast.dismiss(loadingToast);
+            toast.error(error.message || 'Gagal menghapus data tamu.');
+          }
+        },
+      });
+      return;
+    }
+
     const loadingToast = toast.loading('Keluar dari akun...');
 
     try {
-      if (!isGuest) {
-        await axios.post(`${API_URL}/logout`, {}, authHeaders);
-      }
+      await axios.post(`${API_URL}/logout`, {}, authHeaders);
       toast.dismiss(loadingToast);
-      toast.success(isGuest ? 'Keluar dari mode tamu.' : 'Berhasil logout.');
+      toast.success('Berhasil logout.');
     } catch (error) {
       toast.dismiss(loadingToast);
       toast.error('Sesi diakhiri dari perangkat ini.');
@@ -1645,16 +1668,36 @@ const Dashboard = () => {
       </section>
 
       {isGuest ? (
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="mb-3 flex items-center gap-2">
-            <LockKeyhole size={18} className="text-[#0056b3]" />
-            <h2 className="font-bold text-gray-900">Mode Tamu</h2>
-          </div>
-          <p className="text-sm leading-6 text-gray-500">
-            Data kamu saat ini tersimpan di perangkat ini. Tombol aktivasi akun online dan migrasi data akan kita buat
-            pada tahap berikutnya.
-          </p>
-        </section>
+        <>
+          <section className="rounded-2xl bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center gap-2">
+              <LockKeyhole size={18} className="text-[#0056b3]" />
+              <h2 className="font-bold text-gray-900">Mode Tamu</h2>
+            </div>
+            <p className="text-sm leading-6 text-gray-500">
+              Data kamu saat ini tersimpan di perangkat ini. Jika logout dari mode tamu, semua data lokal yang sudah
+              dibuat akan dihapus permanen.
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-blue-100 bg-blue-50 p-4 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#0056b3]">
+                <CloudUpload size={20} />
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-bold text-gray-900">Migrasi Akun Online</h2>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-[#0056b3]">Segera</span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-gray-600">
+                  Fitur untuk memindahkan data tamu ke akun online sedang disiapkan. Nantinya data lokal bisa dibawa ke
+                  server setelah kamu menyetujui kebijakan migrasi dan membuat akun.
+                </p>
+              </div>
+            </div>
+          </section>
+        </>
       ) : (
         <section className="rounded-2xl bg-white p-4 shadow-sm">
           <div className="mb-4 flex items-center gap-2">

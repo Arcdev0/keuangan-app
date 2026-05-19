@@ -84,6 +84,21 @@ export const stopGuestMode = () => {
   }
 };
 
+export const clearGuestData = () => new Promise((resolve, reject) => {
+  const request = indexedDB.deleteDatabase(DB_NAME);
+
+  request.onsuccess = () => {
+    localStorage.removeItem(GUEST_MODE_KEY);
+    localStorage.removeItem('user_info');
+    localStorage.removeItem('auth_token');
+    resolve();
+  };
+  request.onerror = () => reject(request.error);
+  request.onblocked = () => {
+    reject(new Error('Data tamu sedang digunakan. Tutup aplikasi lalu coba lagi.'));
+  };
+});
+
 export const ensureGuestCategories = async () => {
   const [categories, transactions, budgets] = await Promise.all([
     getAll('budgetCategories'),
