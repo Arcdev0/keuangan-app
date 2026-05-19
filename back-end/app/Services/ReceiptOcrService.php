@@ -46,7 +46,7 @@ class ReceiptOcrService
             '6',
         ]);
 
-        $process->setTimeout(max((int) config('ocr.timeout', 20), 5));
+        $process->setTimeout(30);
 
         try {
             $process->mustRun();

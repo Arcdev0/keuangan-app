@@ -368,60 +368,6 @@ const Dashboard = () => {
     }));
   };
 
-  const optimizeReceiptImageForOcr = (file) => new Promise((resolve) => {
-    if (!file.type.startsWith('image/')) {
-      resolve(file);
-      return;
-    }
-
-    const imageUrl = URL.createObjectURL(file);
-    const image = new window.Image();
-
-    image.onload = () => {
-      URL.revokeObjectURL(imageUrl);
-
-      const maxWidth = 1800;
-
-      if (image.width <= maxWidth) {
-        resolve(file);
-        return;
-      }
-
-      const scale = maxWidth / image.width;
-      const canvas = document.createElement('canvas');
-      canvas.width = maxWidth;
-      canvas.height = Math.round(image.height * scale);
-
-      const context = canvas.getContext('2d');
-      if (!context) {
-        resolve(file);
-        return;
-      }
-
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            resolve(file);
-            return;
-          }
-
-          resolve(new File([blob], `ocr-${file.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' }));
-        },
-        'image/jpeg',
-        0.92,
-      );
-    };
-
-    image.onerror = () => {
-      URL.revokeObjectURL(imageUrl);
-      resolve(file);
-    };
-
-    image.src = imageUrl;
-  });
-
   const handleTypeChange = (type) => {
     setTransactionForm((currentForm) => {
       const fromWalletId = currentForm.wallet_id || String(wallets[0]?.id || '');
@@ -486,7 +432,7 @@ const Dashboard = () => {
     }
   };
 
-  const handleFileChange = async (event) => {
+  const handleFileChange = (event) => {
     const file = event.target.files?.[0];
 
     if (!file) {
@@ -516,8 +462,7 @@ const Dashboard = () => {
     setAttachmentPreview(file.type.startsWith('image/') ? URL.createObjectURL(file) : '');
 
     if (file.type.startsWith('image/')) {
-      const ocrFile = await optimizeReceiptImageForOcr(file);
-      scanReceiptFile(ocrFile);
+      scanReceiptFile(file);
     }
   };
 
