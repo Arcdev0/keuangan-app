@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { API_URL } from '../../utils/api';
 import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
 
 const walletTypeOptions = [
@@ -24,7 +25,7 @@ const SetupWallet = () => {
 
   const loadWallets = async () => {
     try {
-      const response = await axios.get('http://127.0.0.1:8000/api/wallets', authHeader);
+      const response = await axios.get(`${API_URL}/wallets`, authHeader);
       setWallets(response.data?.data || []);
     } catch (error) {
       toast.error('Gagal memuat daftar dompet.');
@@ -55,7 +56,7 @@ const SetupWallet = () => {
     }
 
     try {
-      await axios.post('http://127.0.0.1:8000/api/wallets', {
+      await axios.post(`${API_URL}/wallets`, {
         name,
         type,
         opening_balance: openingBalance,

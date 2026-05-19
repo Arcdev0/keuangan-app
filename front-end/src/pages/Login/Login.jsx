@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { API_URL } from '../../utils/api';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -14,7 +15,7 @@ const Login = () => {
     const loadingToast = toast.loading('Sedang masuk...');
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/api/login', { email, password });
+      const response = await axios.post(`${API_URL}/login`, { email, password });
 
       const authData = response.data?.data;
       const token = authData?.token;

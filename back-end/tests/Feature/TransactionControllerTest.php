@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\BudgetCategory;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Services\ReceiptOcrService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -218,5 +219,116 @@ class TransactionControllerTest extends TestCase
             ->assertJsonCount(1, 'data.attachments');
 
         $this->assertNotEmpty(Storage::disk('public')->files('transaction-attachments'));
+    }
+
+    public function test_receipt_scan_returns_parsed_transaction_suggestion(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $category = $this->createCategory($user);
+
+        $this->mock(ReceiptOcrService::class, function ($mock) use ($category) {
+            $mock->shouldReceive('scan')
+                ->once()
+                ->andReturn([
+                    'raw_text' => 'TOTAL Rp15.000',
+                    'parsed' => [
+                        'amount' => 15000,
+                        'trx_date' => '2026-05-19',
+                        'note' => 'Warung - Struk belanja',
+                        'merchant' => 'Warung',
+                        'budget_category_id' => $category->id,
+                        'category_name' => $category->name,
+                    ],
+                    'confidence_note' => 'Hasil OCR perlu dicek ulang sebelum transaksi disimpan.',
+                ]);
+        });
+
+        Sanctum::actingAs($user);
+
+        $response = $this->post('/api/transactions/scan-receipt', [
+            'receipt' => UploadedFile::fake()->image('struk.jpg'),
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.parsed.amount', 15000)
+            ->assertJsonPath('data.parsed.budget_category_id', $category->id);
+    }
+
+    public function test_transaction_can_be_updated_and_recalculates_wallet_balance(): void
+    {
+        $user = User::factory()->create();
+        $category = $this->createCategory($user);
+        $wallet = Wallet::create([
+            'user_id' => $user->id,
+            'name' => 'Tunai',
+            'type' => 'cash',
+            'opening_balance' => 100000,
+            'current_balance' => 100000,
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $created = $this->postJson('/api/transactions', [
+            'type' => 'expense',
+            'wallet_id' => $wallet->id,
+            'budget_category_id' => $category->id,
+            'amount' => 25000,
+            'trx_date' => '2026-05-18',
+            'note' => 'Typo',
+        ])->json('data');
+
+        $response = $this->patchJson("/api/transactions/{$created['id']}", [
+            'type' => 'expense',
+            'wallet_id' => $wallet->id,
+            'budget_category_id' => $category->id,
+            'amount' => 15000,
+            'trx_date' => '2026-05-18',
+            'note' => 'Makan siang',
+        ]);
+
+        $response
+            ->assertOk()
+            ->assertJsonPath('data.amount', '15000.00');
+
+        $this->assertSame('85000.00', $wallet->fresh()->current_balance);
+    }
+
+    public function test_transaction_can_be_deleted_and_reverses_wallet_balance(): void
+    {
+        $user = User::factory()->create();
+        $category = $this->createCategory($user);
+        $wallet = Wallet::create([
+            'user_id' => $user->id,
+            'name' => 'Tunai',
+            'type' => 'cash',
+            'opening_balance' => 100000,
+            'current_balance' => 100000,
+            'is_default' => true,
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $created = $this->postJson('/api/transactions', [
+            'type' => 'expense',
+            'wallet_id' => $wallet->id,
+            'budget_category_id' => $category->id,
+            'amount' => 25000,
+            'trx_date' => '2026-05-18',
+        ])->json('data');
+
+        $this->assertSame('75000.00', $wallet->fresh()->current_balance);
+
+        $this->deleteJson("/api/transactions/{$created['id']}")
+            ->assertOk()
+            ->assertJsonPath('message', 'Transaksi berhasil dihapus');
+
+        $this->assertSame('100000.00', $wallet->fresh()->current_balance);
+        $this->assertDatabaseMissing('transactions', ['id' => $created['id']]);
     }
 }

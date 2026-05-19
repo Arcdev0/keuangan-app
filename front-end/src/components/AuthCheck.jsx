@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../utils/api';
 
 const AuthCheck = () => {
   const navigate = useNavigate();
@@ -15,7 +16,7 @@ const AuthCheck = () => {
       }
 
       try {
-        const response = await axios.get('http://127.0.0.1:8000/api/me', {
+        const response = await axios.get(`${API_URL}/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 

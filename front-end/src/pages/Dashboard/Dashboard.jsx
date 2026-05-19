@@ -8,7 +8,6 @@ import {
   CalendarDays,
   ChevronRight,
   Clock3,
-  CreditCard,
   Eye,
   EyeOff,
   FileText,
@@ -17,10 +16,13 @@ import {
   Home,
   Image,
   LogOut,
+  Moon,
+  Pencil,
   Plus,
   Puzzle,
   ReceiptText,
   Settings,
+  Trash2,
   Users,
   Sun,
   Target,
@@ -29,9 +31,8 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
+import { API_BASE_URL, API_URL } from '../../utils/api';
 import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
-
-const API_URL = 'http://127.0.0.1:8000/api';
 
 const typeOptions = [
   { label: 'Pengeluaran', value: 'expense' },
@@ -45,6 +46,8 @@ const walletTypeLabels = {
   'e-wallet': 'E-Wallet',
   other: 'Lainnya',
 };
+
+const walletChartColors = ['#0056b3', '#0f9f6e', '#f59e0b', '#dc2626', '#7c3aed'];
 
 const navItems = [
   { key: 'home', label: 'Beranda', icon: Home },
@@ -98,9 +101,12 @@ const Dashboard = () => {
   const [savingTransaction, setSavingTransaction] = useState(false);
   const [savingBudget, setSavingBudget] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [scanningReceipt, setScanningReceipt] = useState(false);
+  const [clockDate, setClockDate] = useState(() => new Date());
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [editingTransaction, setEditingTransaction] = useState(null);
   const [transactionForm, setTransactionForm] = useState(initialTransactionForm);
   const [budgetForm, setBudgetForm] = useState(initialBudgetForm);
   const [passwordForm, setPasswordForm] = useState(initialPasswordForm);
@@ -155,6 +161,14 @@ const Dashboard = () => {
 
     loadDashboard();
   }, [loadDashboard, navigate, token]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setClockDate(new Date());
+    }, 60000);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!showTransactionModal || wallets.length === 0) {
@@ -264,9 +278,12 @@ const Dashboard = () => {
       return '';
     }
 
-    return path.startsWith('http') ? path : `http://127.0.0.1:8000${path}`;
+    return path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
   };
-  const currentTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  const currentHour = clockDate.getHours();
+  const isNightTime = currentHour >= 18 || currentHour < 6;
+  const TimeIcon = isNightTime ? Moon : Sun;
+  const currentTime = clockDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
   const pageTitle = activeView === 'history' ? 'Riwayat transaksi' : 'Catat uangmu dengan mudah';
   const pageSubtitle = activeView === 'history'
@@ -344,6 +361,38 @@ const Dashboard = () => {
     });
   };
 
+  const scanReceiptFile = async (file) => {
+    const payload = new FormData();
+    payload.append('receipt', file);
+
+    const loadingToast = toast.loading('Membaca struk...');
+    setScanningReceipt(true);
+
+    try {
+      const response = await axios.post(`${API_URL}/transactions/scan-receipt`, payload, authHeaders);
+      const parsed = response.data?.data?.parsed || {};
+
+      setTransactionForm((currentForm) => ({
+        ...currentForm,
+        type: 'expense',
+        amount: parsed.amount ? formatMoneyInput(parsed.amount) : currentForm.amount,
+        trx_date: parsed.trx_date || currentForm.trx_date,
+        note: parsed.note || currentForm.note,
+        budget_category_id: parsed.budget_category_id
+          ? String(parsed.budget_category_id)
+          : currentForm.budget_category_id,
+      }));
+
+      toast.dismiss(loadingToast);
+      toast.success('Struk terbaca. Cek ulang sebelum disimpan.');
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error(getValidationMessage(error));
+    } finally {
+      setScanningReceipt(false);
+    }
+  };
+
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
 
@@ -372,6 +421,10 @@ const Dashboard = () => {
 
     updateTransactionForm('attachment', file);
     setAttachmentPreview(file.type.startsWith('image/') ? URL.createObjectURL(file) : '');
+
+    if (file.type.startsWith('image/')) {
+      scanReceiptFile(file);
+    }
   };
 
   const removeAttachment = () => {
@@ -389,6 +442,7 @@ const Dashboard = () => {
     }
 
     setAttachmentPreview('');
+    setEditingTransaction(null);
     setTransactionForm({
       ...initialTransactionForm,
       trx_date: getToday(),
@@ -479,6 +533,60 @@ const Dashboard = () => {
     setSelectedTransaction(null);
   };
 
+  const openEditTransaction = () => {
+    if (!selectedTransaction) {
+      return;
+    }
+
+    if (attachmentPreview) {
+      URL.revokeObjectURL(attachmentPreview);
+    }
+
+    const transactionDate = selectedTransaction.trx_date
+      ? new Date(selectedTransaction.trx_date).toISOString().slice(0, 10)
+      : getToday();
+
+    setEditingTransaction(selectedTransaction);
+    setAttachmentPreview('');
+    setTransactionForm({
+      type: selectedTransaction.type || 'expense',
+      wallet_id: selectedTransaction.wallet_id ? String(selectedTransaction.wallet_id) : '',
+      to_wallet_id: selectedTransaction.to_wallet_id ? String(selectedTransaction.to_wallet_id) : '',
+      budget_category_id: selectedTransaction.budget_category_id ? String(selectedTransaction.budget_category_id) : '',
+      amount: formatMoneyInput(selectedTransaction.amount),
+      trx_date: transactionDate,
+      note: selectedTransaction.note || '',
+      attachment: null,
+    });
+    setSelectedTransaction(null);
+    setShowTransactionModal(true);
+  };
+
+  const handleDeleteTransaction = async () => {
+    if (!selectedTransaction) {
+      return;
+    }
+
+    const confirmed = window.confirm('Hapus transaksi ini? Saldo dompet akan dikembalikan sesuai efek transaksi.');
+
+    if (!confirmed) {
+      return;
+    }
+
+    const loadingToast = toast.loading('Menghapus transaksi...');
+
+    try {
+      await axios.delete(`${API_URL}/transactions/${selectedTransaction.id}`, authHeaders);
+      toast.dismiss(loadingToast);
+      toast.success('Transaksi berhasil dihapus.');
+      setSelectedTransaction(null);
+      await loadDashboard();
+    } catch (error) {
+      toast.dismiss(loadingToast);
+      toast.error(getValidationMessage(error));
+    }
+  };
+
   const handleSubmitTransaction = async (event) => {
     event.preventDefault();
 
@@ -538,13 +646,19 @@ const Dashboard = () => {
       payload.append('attachment', transactionForm.attachment);
     }
 
-    const loadingToast = toast.loading('Menyimpan transaksi...');
+    const loadingToast = toast.loading(editingTransaction ? 'Memperbarui transaksi...' : 'Menyimpan transaksi...');
     setSavingTransaction(true);
 
     try {
-      await axios.post(`${API_URL}/transactions`, payload, authHeaders);
+      if (editingTransaction) {
+        payload.append('_method', 'PATCH');
+        await axios.post(`${API_URL}/transactions/${editingTransaction.id}`, payload, authHeaders);
+      } else {
+        await axios.post(`${API_URL}/transactions`, payload, authHeaders);
+      }
+
       toast.dismiss(loadingToast);
-      toast.success('Transaksi berhasil disimpan.');
+      toast.success(editingTransaction ? 'Transaksi berhasil diperbarui.' : 'Transaksi berhasil disimpan.');
       setShowTransactionModal(false);
       resetTransactionForm();
       await loadDashboard();
@@ -657,7 +771,10 @@ const Dashboard = () => {
   const budgetPercentage = Number(budgetSummary?.percentage || 0);
   const monthlyNetCashflow = currentMonthSummary.income - currentMonthSummary.expense;
   const recentTransactions = transactions.slice(0, 3);
-  const largestWalletBalance = Math.max(...wallets.map((wallet) => Number(wallet.current_balance || 0)), 1);
+  const positiveWalletTotal = wallets.reduce(
+    (sum, wallet) => sum + Math.max(Number(wallet.current_balance || 0), 0),
+    0,
+  );
   const budgetStatusText =
     budgetTotalLimit === 0
       ? 'Belum ada limit'
@@ -771,25 +888,34 @@ const Dashboard = () => {
           </button>
         ) : (
           <div className="space-y-3">
-            {wallets.slice(0, 3).map((wallet) => {
-              const walletPercentage = Math.round((Number(wallet.current_balance || 0) / largestWalletBalance) * 100);
+            {wallets.slice(0, 4).map((wallet, index) => {
+              const walletBalance = Number(wallet.current_balance || 0);
+              const walletPercentage =
+                positiveWalletTotal > 0 ? Math.round((Math.max(walletBalance, 0) / positiveWalletTotal) * 100) : 0;
+              const walletColor = walletChartColors[index % walletChartColors.length];
 
               return (
-                <div key={wallet.id}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gray-100 text-[#0056b3]">
-                        <CreditCard size={18} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-gray-950">{wallet.name}</p>
-                        <p className="text-xs text-gray-500">{walletTypeLabels[wallet.type] || wallet.type}</p>
+                <div key={wallet.id} className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div
+                      className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
+                      style={{
+                        background: `conic-gradient(${walletColor} ${walletPercentage * 3.6}deg, #edf1f7 0deg)`,
+                      }}
+                      aria-label={`${wallet.name} ${walletPercentage}% dari total saldo`}
+                    >
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white">
+                        <span className="text-[11px] font-bold text-gray-900">{walletPercentage}%</span>
                       </div>
                     </div>
-                    <p className="shrink-0 text-sm font-bold text-gray-950">{dashboardAmount(wallet.current_balance)}</p>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-950">{wallet.name}</p>
+                      <p className="text-xs text-gray-500">{walletTypeLabels[wallet.type] || wallet.type}</p>
+                    </div>
                   </div>
-                  <div className="ml-[52px] mt-2 h-1.5 rounded-full bg-gray-100">
-                    <div className="h-1.5 rounded-full bg-[#0056b3]" style={{ width: `${walletPercentage}%` }} />
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-bold text-gray-950">{dashboardAmount(wallet.current_balance)}</p>
+                    <p className="text-[11px] text-gray-500">dari total saldo</p>
                   </div>
                 </div>
               );
@@ -1216,6 +1342,65 @@ const Dashboard = () => {
     </div>
   );
 
+  const renderReceiptUpload = () => (
+    <div className="space-y-2 rounded-2xl border border-dashed border-[#b8c6df] bg-[#f8f9ff] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-gray-900">Foto / Struk</p>
+          <p className="mt-0.5 text-xs text-gray-500">
+            Upload foto struk, form akan dicoba isi otomatis.
+          </p>
+        </div>
+        <label className="flex h-10 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-[#0056b3] px-4 text-xs font-bold text-white active:bg-[#064da3]">
+          {transactionForm.attachment ? 'Ganti' : 'Upload'}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            onChange={handleFileChange}
+            className="sr-only"
+          />
+        </label>
+      </div>
+
+      {scanningReceipt && (
+        <div className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-[#0056b3]">
+          Membaca struk dan mengisi form...
+        </div>
+      )}
+
+      {transactionForm.attachment && (
+        <div className="rounded-xl border border-[#d6dfef] bg-white p-2">
+          <div className="flex items-center gap-3">
+            {attachmentPreview ? (
+              <img
+                src={attachmentPreview}
+                alt="Preview struk"
+                className="h-14 w-14 rounded-lg object-cover"
+              />
+            ) : (
+              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-gray-50 text-xs font-bold text-[#0b4fa8]">
+                PDF
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-gray-800">{transactionForm.attachment.name}</p>
+              <p className="text-xs text-gray-500">
+                {(transactionForm.attachment.size / 1024 / 1024).toFixed(2)} MB
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={removeAttachment}
+              className="h-8 rounded-lg px-3 text-xs font-semibold text-red-600"
+            >
+              Hapus
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#f2f5fb] pb-28">
       <header className="bg-[#064da3] px-5 pb-4 pt-5 text-white shadow-lg rounded-b-[18px]">
@@ -1223,7 +1408,7 @@ const Dashboard = () => {
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">Hi, {userInfo?.name || 'Pengguna'}</p>
             <div className="flex items-center gap-1 text-sm">
-              <Sun size={16} className="text-yellow-300" />
+              <TimeIcon size={16} className={isNightTime ? 'text-blue-100' : 'text-yellow-300'} />
               <span>{currentTime}</span>
             </div>
           </div>
@@ -1410,6 +1595,25 @@ const Dashboard = () => {
                           </div>
                         )}
                       </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={openEditTransaction}
+                          className="flex h-11 items-center justify-center gap-2 rounded-lg bg-[#0056b3] text-sm font-bold text-white"
+                        >
+                          <Pencil size={16} />
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeleteTransaction}
+                          className="flex h-11 items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 text-sm font-bold text-red-600"
+                        >
+                          <Trash2 size={16} />
+                          Hapus
+                        </button>
+                      </div>
                     </div>
                   );
                 })()
@@ -1505,7 +1709,9 @@ const Dashboard = () => {
             <div className="relative rounded-t-[18px] bg-[#f4f6fb] px-4 pb-3 pt-7 sm:rounded-t-[18px]">
               <span className="absolute left-1/2 top-3 h-1 w-10 -translate-x-1/2 rounded-full bg-[#c5cad4]" />
               <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-gray-900">Tambah Transaksi</h2>
+                <h2 className="text-sm font-bold text-gray-900">
+                  {editingTransaction ? 'Edit Transaksi' : 'Tambah Transaksi'}
+                </h2>
                 <button
                   type="button"
                   aria-label="Tutup modal tambah transaksi"
@@ -1521,6 +1727,8 @@ const Dashboard = () => {
               onSubmit={handleSubmitTransaction}
               className="max-h-[82vh] space-y-3 overflow-y-auto rounded-b-[18px] bg-white px-5 pb-4 pt-3"
             >
+              {renderReceiptUpload()}
+
               <div>
                 <label className="mb-2 block text-sm text-gray-700">Jenis</label>
                 <div className="grid grid-cols-3 rounded-full bg-[#bfbfbf] p-1">
@@ -1652,58 +1860,20 @@ const Dashboard = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <div className="grid grid-cols-[72px_1fr] items-center gap-2">
-                  <span className="text-sm text-gray-700">Foto / Struk</span>
-                  <label className="flex min-h-11 cursor-pointer items-center justify-center rounded-lg border border-dashed border-[#b8c6df] bg-[#f8f9ff] px-3 text-center text-xs font-semibold text-[#0b4fa8] active:bg-blue-50">
-                    {transactionForm.attachment ? 'Ganti File' : 'Upload Foto / File'}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,application/pdf"
-                      onChange={handleFileChange}
-                      className="sr-only"
-                    />
-                  </label>
-                </div>
-
-                {transactionForm.attachment && (
-                  <div className="ml-0 rounded-xl border border-[#d6dfef] bg-gray-50 p-2">
-                    <div className="flex items-center gap-3">
-                      {attachmentPreview ? (
-                        <img
-                          src={attachmentPreview}
-                          alt="Preview struk"
-                          className="h-14 w-14 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-white text-xs font-bold text-[#0b4fa8]">
-                          PDF
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-gray-800">{transactionForm.attachment.name}</p>
-                        <p className="text-xs text-gray-500">
-                          {(transactionForm.attachment.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={removeAttachment}
-                        className="h-8 rounded-lg px-3 text-xs font-semibold text-red-600"
-                      >
-                        Hapus
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <button
                 type="submit"
-                disabled={savingTransaction || wallets.length === 0}
+                disabled={savingTransaction || scanningReceipt || wallets.length === 0}
                 className="h-11 w-full rounded-lg bg-[#064da3] text-sm font-bold text-white shadow-sm transition hover:bg-[#004795] disabled:cursor-not-allowed disabled:bg-gray-400"
               >
-                {savingTransaction ? 'Menyimpan...' : 'Simpan Transaksi'}
+                {scanningReceipt
+                  ? 'Menunggu OCR...'
+                  : savingTransaction
+                  ? editingTransaction
+                    ? 'Memperbarui...'
+                    : 'Menyimpan...'
+                  : editingTransaction
+                    ? 'Simpan Perubahan'
+                    : 'Simpan Transaksi'}
               </button>
             </form>
           </div>

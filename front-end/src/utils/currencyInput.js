@@ -1,5 +1,9 @@
 export const formatMoneyInput = (value) => {
-  const digits = String(value || '').replace(/\D/g, '');
+  const normalizedValue = String(value || '');
+  const sourceValue = /^\d+\.\d{1,2}$/.test(normalizedValue) && Number(normalizedValue) < 1000
+    ? normalizedValue.split('.')[0]
+    : normalizedValue;
+  const digits = sourceValue.replace(/\D/g, '');
 
   if (!digits) {
     return '';

@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import React, { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { API_URL } from '../../utils/api';
 
 const Register = () => {
   const [name, setName] = useState('');
@@ -21,7 +22,7 @@ const Register = () => {
     const loadingToast = toast.loading('Mendaftarkan akun...');
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/api/register', {
+      const response = await axios.post(`${API_URL}/register`, {
         name,
         email,
         password,
