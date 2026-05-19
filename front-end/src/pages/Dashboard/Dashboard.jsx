@@ -36,6 +36,7 @@ import {
 import ConfirmationDialog from '../../components/ConfirmationDialog';
 import { API_BASE_URL, API_URL, clearAuthSession, isUnauthorizedError } from '../../utils/api';
 import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
+import { guestStorage, isGuestMode } from '../../utils/guestStorage';
 
 const typeOptions = [
   { label: 'Pengeluaran', value: 'expense' },
@@ -127,6 +128,7 @@ const Dashboard = () => {
   const [attachmentPreview, setAttachmentPreview] = useState('');
 
   const token = localStorage.getItem('auth_token');
+  const isGuest = isGuestMode();
   const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');
 
   const authHeaders = useMemo(
@@ -137,25 +139,45 @@ const Dashboard = () => {
   );
 
   const fetchWallets = useCallback(async () => {
+    if (isGuest) {
+      setWallets(await guestStorage.getWallets());
+      return;
+    }
+
     const response = await axios.get(`${API_URL}/wallets`, authHeaders);
     setWallets(response.data?.data || []);
-  }, [authHeaders]);
+  }, [authHeaders, isGuest]);
 
   const fetchTransactions = useCallback(async () => {
+    if (isGuest) {
+      setTransactions(await guestStorage.getTransactions());
+      return;
+    }
+
     const response = await axios.get(`${API_URL}/transactions?per_page=100`, authHeaders);
     setTransactions(response.data?.data || []);
-  }, [authHeaders]);
+  }, [authHeaders, isGuest]);
 
   const fetchBudgetCategories = useCallback(async () => {
+    if (isGuest) {
+      setBudgetCategories(await guestStorage.getBudgetCategories());
+      return;
+    }
+
     const response = await axios.get(`${API_URL}/budget-categories`, authHeaders);
     setBudgetCategories(response.data?.data || []);
-  }, [authHeaders]);
+  }, [authHeaders, isGuest]);
 
   const fetchBudgets = useCallback(async () => {
     const [year, month] = budgetMonth.split('-');
+    if (isGuest) {
+      setBudgetSummary(await guestStorage.getBudgetSummary(Number(year), Number(month)));
+      return;
+    }
+
     const response = await axios.get(`${API_URL}/budgets?year=${year}&month=${Number(month)}`, authHeaders);
     setBudgetSummary(response.data?.data || null);
-  }, [authHeaders, budgetMonth]);
+  }, [authHeaders, budgetMonth, isGuest]);
 
   const handleUnauthorized = useCallback((error) => {
     if (!isUnauthorizedError(error)) {
@@ -184,13 +206,13 @@ const Dashboard = () => {
   }, [fetchBudgetCategories, fetchBudgets, fetchTransactions, fetchWallets, handleUnauthorized]);
 
   useEffect(() => {
-    if (!token) {
+    if (!token && !isGuest) {
       navigate('/login');
       return;
     }
 
     loadDashboard();
-  }, [loadDashboard, navigate, token]);
+  }, [isGuest, loadDashboard, navigate, token]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -404,7 +426,8 @@ const Dashboard = () => {
     setScanningReceipt(true);
 
     try {
-      const response = await axios.post(`${API_URL}/transactions/scan-receipt`, payload, authHeaders);
+      const scanUrl = isGuest ? `${API_URL}/guest/transactions/scan-receipt` : `${API_URL}/transactions/scan-receipt`;
+      const response = await axios.post(scanUrl, payload, isGuest ? undefined : authHeaders);
       const parsed = response.data?.data?.parsed || {};
 
       setTransactionForm((currentForm) => ({
@@ -594,6 +617,11 @@ const Dashboard = () => {
     setLoadingTransactionDetail(true);
 
     try {
+      if (isGuest) {
+        setSelectedTransaction(transactions.find((transaction) => Number(transaction.id) === Number(transactionId)) || null);
+        return;
+      }
+
       const response = await axios.get(`${API_URL}/transactions/${transactionId}`, authHeaders);
       setSelectedTransaction(response.data?.data || null);
     } catch (error) {
@@ -654,7 +682,11 @@ const Dashboard = () => {
         const loadingToast = toast.loading('Menghapus transaksi...');
 
         try {
-          await axios.delete(`${API_URL}/transactions/${selectedTransaction.id}`, authHeaders);
+          if (isGuest) {
+            await guestStorage.deleteTransaction(selectedTransaction.id);
+          } else {
+            await axios.delete(`${API_URL}/transactions/${selectedTransaction.id}`, authHeaders);
+          }
           toast.dismiss(loadingToast);
           toast.success('Transaksi berhasil dihapus.');
           setSelectedTransaction(null);
@@ -734,7 +766,21 @@ const Dashboard = () => {
     setSavingTransaction(true);
 
     try {
-      if (editingTransaction) {
+      if (isGuest) {
+        if (editingTransaction) {
+          await guestStorage.deleteTransaction(editingTransaction.id);
+        }
+
+        await guestStorage.addTransaction({
+          type: transactionForm.type,
+          wallet_id: transactionForm.wallet_id,
+          to_wallet_id: transactionForm.to_wallet_id,
+          budget_category_id: transactionForm.budget_category_id,
+          amount: rawAmount,
+          trx_date: transactionForm.trx_date,
+          note: transactionForm.note.trim(),
+        });
+      } else if (editingTransaction) {
         payload.append('_method', 'PATCH');
         await axios.post(`${API_URL}/transactions/${editingTransaction.id}`, payload, authHeaders);
       } else {
@@ -778,16 +824,25 @@ const Dashboard = () => {
     setSavingBudget(true);
 
     try {
-      await axios.post(
-        `${API_URL}/budgets`,
-        {
+      if (isGuest) {
+        await guestStorage.saveBudget({
           budget_category_id: budgetForm.budget_category_id,
           period_year: Number(year),
           period_month: Number(month),
           amount: rawAmount,
-        },
-        authHeaders,
-      );
+        });
+      } else {
+        await axios.post(
+          `${API_URL}/budgets`,
+          {
+            budget_category_id: budgetForm.budget_category_id,
+            period_year: Number(year),
+            period_month: Number(month),
+            amount: rawAmount,
+          },
+          authHeaders,
+        );
+      }
       toast.dismiss(loadingToast);
       toast.success('Anggaran berhasil disimpan.');
       closeBudgetModal();
@@ -820,7 +875,11 @@ const Dashboard = () => {
         setSavingBudget(true);
 
         try {
-          await axios.delete(`${API_URL}/budgets/${selectedBudgetItem.budget_id}`, authHeaders);
+          if (isGuest) {
+            await guestStorage.deleteBudget(selectedBudgetItem.budget_id);
+          } else {
+            await axios.delete(`${API_URL}/budgets/${selectedBudgetItem.budget_id}`, authHeaders);
+          }
           toast.dismiss(loadingToast);
           toast.success('Limit anggaran berhasil dihapus.');
           closeBudgetModal();
@@ -845,6 +904,14 @@ const Dashboard = () => {
     setSavingBudgetCopy(true);
 
     try {
+      if (isGuest) {
+        const summary = await guestStorage.copyPreviousBudgets(Number(year), Number(month));
+        toast.dismiss(loadingToast);
+        toast.success('Limit bulan sebelumnya berhasil disalin.');
+        setBudgetSummary(summary);
+        return;
+      }
+
       const response = await axios.post(
         `${API_URL}/budgets/copy-previous`,
         {
@@ -881,13 +948,15 @@ const Dashboard = () => {
     setSavingBudgetCategory(true);
 
     try {
-      const response = await axios.post(
-        `${API_URL}/budget-categories`,
-        {
-          name: budgetCategoryForm.name.trim(),
-        },
-        authHeaders,
-      );
+      const response = isGuest
+        ? { data: { data: await guestStorage.addBudgetCategory({ name: budgetCategoryForm.name.trim() }) } }
+        : await axios.post(
+          `${API_URL}/budget-categories`,
+          {
+            name: budgetCategoryForm.name.trim(),
+          },
+          authHeaders,
+        );
       const newCategory = response.data?.data;
 
       toast.dismiss(loadingToast);
@@ -935,7 +1004,11 @@ const Dashboard = () => {
         setSavingBudget(true);
 
         try {
-          await axios.delete(`${API_URL}/budget-categories/${selectedBudgetItem.category_id}`, authHeaders);
+          if (isGuest) {
+            await guestStorage.deleteBudgetCategory(selectedBudgetItem.category_id);
+          } else {
+            await axios.delete(`${API_URL}/budget-categories/${selectedBudgetItem.category_id}`, authHeaders);
+          }
           toast.dismiss(loadingToast);
           toast.success('Kategori berhasil dihapus. Transaksi lama dipindahkan ke Lainnya.');
           closeBudgetModal();
@@ -993,9 +1066,11 @@ const Dashboard = () => {
     const loadingToast = toast.loading('Keluar dari akun...');
 
     try {
-      await axios.post(`${API_URL}/logout`, {}, authHeaders);
+      if (!isGuest) {
+        await axios.post(`${API_URL}/logout`, {}, authHeaders);
+      }
       toast.dismiss(loadingToast);
-      toast.success('Berhasil logout.');
+      toast.success(isGuest ? 'Keluar dari mode tamu.' : 'Berhasil logout.');
     } catch (error) {
       toast.dismiss(loadingToast);
       toast.error('Sesi diakhiri dari perangkat ini.');
@@ -1555,46 +1630,59 @@ const Dashboard = () => {
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white p-4 shadow-sm">
-        <div className="mb-4 flex items-center gap-2">
-          <LockKeyhole size={18} className="text-[#0056b3]" />
-          <h2 className="font-bold text-gray-900">Ganti Password</h2>
-        </div>
+      {isGuest ? (
+        <section className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center gap-2">
+            <LockKeyhole size={18} className="text-[#0056b3]" />
+            <h2 className="font-bold text-gray-900">Mode Tamu</h2>
+          </div>
+          <p className="text-sm leading-6 text-gray-500">
+            Data kamu saat ini tersimpan di perangkat ini. Tombol aktivasi akun online dan migrasi data akan kita buat
+            pada tahap berikutnya.
+          </p>
+        </section>
+      ) : (
+        <section className="rounded-2xl bg-white p-4 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <LockKeyhole size={18} className="text-[#0056b3]" />
+            <h2 className="font-bold text-gray-900">Ganti Password</h2>
+          </div>
 
-        <form onSubmit={handleSubmitPassword} className="space-y-3">
-          <input
-            type="password"
-            value={passwordForm.current_password}
-            onChange={(event) => updatePasswordForm('current_password', event.target.value)}
-            placeholder="Password lama"
-            className="h-11 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
-            required
-          />
-          <input
-            type="password"
-            value={passwordForm.password}
-            onChange={(event) => updatePasswordForm('password', event.target.value)}
-            placeholder="Password baru"
-            className="h-11 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
-            required
-          />
-          <input
-            type="password"
-            value={passwordForm.password_confirmation}
-            onChange={(event) => updatePasswordForm('password_confirmation', event.target.value)}
-            placeholder="Konfirmasi password baru"
-            className="h-11 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
-            required
-          />
-          <button
-            type="submit"
-            disabled={savingPassword}
-            className="h-11 w-full rounded-lg bg-[#0056b3] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-400"
-          >
-            {savingPassword ? 'Menyimpan...' : 'Simpan Password'}
-          </button>
-        </form>
-      </section>
+          <form onSubmit={handleSubmitPassword} className="space-y-3">
+            <input
+              type="password"
+              value={passwordForm.current_password}
+              onChange={(event) => updatePasswordForm('current_password', event.target.value)}
+              placeholder="Password lama"
+              className="h-11 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+              required
+            />
+            <input
+              type="password"
+              value={passwordForm.password}
+              onChange={(event) => updatePasswordForm('password', event.target.value)}
+              placeholder="Password baru"
+              className="h-11 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+              required
+            />
+            <input
+              type="password"
+              value={passwordForm.password_confirmation}
+              onChange={(event) => updatePasswordForm('password_confirmation', event.target.value)}
+              placeholder="Konfirmasi password baru"
+              className="h-11 w-full rounded-lg border border-[#d6dfef] px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
+              required
+            />
+            <button
+              type="submit"
+              disabled={savingPassword}
+              className="h-11 w-full rounded-lg bg-[#0056b3] text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-gray-400"
+            >
+              {savingPassword ? 'Menyimpan...' : 'Simpan Password'}
+            </button>
+          </form>
+        </section>
+      )}
 
       <button
         type="button"

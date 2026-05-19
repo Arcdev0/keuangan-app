@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { API_URL } from '../../utils/api';
+import { startGuestMode } from '../../utils/guestStorage';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -25,6 +26,7 @@ const Login = () => {
         throw new Error('Data login dari server tidak lengkap.');
       }
 
+      localStorage.removeItem('app_mode');
       localStorage.setItem('auth_token', token);
       localStorage.setItem('user_info', JSON.stringify(user));
 
@@ -40,6 +42,12 @@ const Login = () => {
       const validationMessage = error.response?.data?.errors?.email?.[0];
       toast.error(apiMessage || validationMessage || error.message || 'Email atau password salah!');
     }
+  };
+
+  const handleGuestMode = () => {
+    startGuestMode();
+    toast.success('Masuk sebagai tamu. Data disimpan di perangkat ini.');
+    navigate('/setup-wallet');
   };
 
   return (
@@ -66,6 +74,18 @@ const Login = () => {
               Masuk
             </button>
           </form>
+
+          <button
+            type="button"
+            onClick={handleGuestMode}
+            className="mt-4 w-full rounded-2xl border border-[#d6dfef] bg-white py-4 font-bold text-[#0056b3] shadow-sm active:scale-[0.98] transition-all"
+          >
+            Mulai sebagai Tamu
+          </button>
+
+          <p className="mt-3 text-center text-xs leading-5 text-gray-500">
+            Mode tamu menyimpan data di HP ini. OCR tetap membutuhkan internet.
+          </p>
 
           <p className="text-center text-gray-500 text-sm mt-8">
             Belum punya akun? <Link to="/register" className="text-[#0056b3] font-bold hover:underline">Daftar Sekarang</Link>

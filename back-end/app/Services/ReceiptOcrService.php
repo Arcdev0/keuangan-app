@@ -15,7 +15,7 @@ use Symfony\Component\Process\Process;
 
 class ReceiptOcrService
 {
-    public function scan(UploadedFile $file, User $user): array
+    public function scan(UploadedFile $file, ?User $user = null): array
     {
         $path = $file->store('receipt-scans', 'local');
         $absolutePath = Storage::disk('local')->path($path);
@@ -71,7 +71,7 @@ class ReceiptOcrService
         return $text;
     }
 
-    private function parseReceiptText(string $text, User $user): array
+    private function parseReceiptText(string $text, ?User $user = null): array
     {
         $lines = collect(preg_split('/\r\n|\r|\n/', $text))
             ->map(fn ($line) => trim(preg_replace('/\s+/', ' ', $line)))
@@ -82,7 +82,7 @@ class ReceiptOcrService
         $date = $this->extractDate($text);
         $details = $this->extractReceiptDetails($lines->all());
         $merchant = $details['merchant'] ?? $this->extractMerchant($lines->all());
-        $category = $this->guessCategory($text, $user);
+        $category = $user ? $this->guessCategory($text, $user) : null;
 
         return [
             'amount' => $amount,

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { API_URL, clearAuthSession } from '../utils/api';
+import { isGuestMode } from '../utils/guestStorage';
 
 const AuthCheck = () => {
   const navigate = useNavigate();
@@ -9,6 +10,11 @@ const AuthCheck = () => {
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('auth_token');
+
+      if (isGuestMode()) {
+        navigate('/dashboard', { replace: true });
+        return;
+      }
 
       if (!token) {
         navigate('/login', { replace: true });

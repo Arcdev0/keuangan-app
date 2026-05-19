@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { API_URL, clearAuthSession, isUnauthorizedError } from '../../utils/api';
 import { formatMoneyInput, moneyInputToNumber, parseMoneyInput } from '../../utils/currencyInput';
+import { guestStorage, isGuestMode } from '../../utils/guestStorage';
 
 const walletTypeOptions = [
   { value: 'cash', label: 'Tunai' },
@@ -21,6 +22,7 @@ const SetupWallet = () => {
   const navigate = useNavigate();
 
   const token = localStorage.getItem('auth_token');
+  const isGuest = isGuestMode();
   const authHeader = useMemo(
     () => ({ headers: { Authorization: `Bearer ${token}` } }),
     [token],
@@ -40,6 +42,11 @@ const SetupWallet = () => {
 
   const loadWallets = useCallback(async () => {
     try {
+      if (isGuest) {
+        setWallets(await guestStorage.getWallets());
+        return;
+      }
+
       const response = await axios.get(`${API_URL}/wallets`, authHeader);
       setWallets(response.data?.data || []);
     } catch (error) {
@@ -51,16 +58,16 @@ const SetupWallet = () => {
     } finally {
       setLoadingWallets(false);
     }
-  }, [authHeader, handleUnauthorized]);
+  }, [authHeader, handleUnauthorized, isGuest]);
 
   useEffect(() => {
-    if (!token) {
+    if (!token && !isGuest) {
       navigate('/login');
       return;
     }
 
     loadWallets();
-  }, [loadWallets, navigate, token]);
+  }, [isGuest, loadWallets, navigate, token]);
 
   const handleAddWallet = async (e) => {
     e.preventDefault();
@@ -75,11 +82,15 @@ const SetupWallet = () => {
     }
 
     try {
-      await axios.post(`${API_URL}/wallets`, {
-        name,
-        type,
-        opening_balance: openingBalance,
-      }, authHeader);
+      if (isGuest) {
+        await guestStorage.addWallet({ name, type, opening_balance: openingBalance });
+      } else {
+        await axios.post(`${API_URL}/wallets`, {
+          name,
+          type,
+          opening_balance: openingBalance,
+        }, authHeader);
+      }
 
       toast.dismiss(loadingToast);
       toast.success('Dompet berhasil ditambahkan!');

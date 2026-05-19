@@ -37,6 +37,7 @@ const Register = () => {
         throw new Error('Data autentikasi dari server tidak lengkap.');
       }
 
+      localStorage.removeItem('app_mode');
       localStorage.setItem('auth_token', token);
       localStorage.setItem('user_info', JSON.stringify(user));
 

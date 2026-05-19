@@ -4,6 +4,7 @@ export const API_URL = `${API_BASE_URL}/api`;
 export const clearAuthSession = () => {
   localStorage.removeItem('auth_token');
   localStorage.removeItem('user_info');
+  localStorage.removeItem('app_mode');
 };
 
 export const isUnauthorizedError = (error) => error?.response?.status === 401;
