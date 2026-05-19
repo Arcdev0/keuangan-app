@@ -83,10 +83,6 @@ const Login = () => {
             Mulai sebagai Tamu
           </button>
 
-          <p className="mt-3 text-center text-xs leading-5 text-gray-500">
-            Mode tamu menyimpan data di HP ini. OCR tetap membutuhkan internet.
-          </p>
-
           <p className="text-center text-gray-500 text-sm mt-8">
             Belum punya akun? <Link to="/register" className="text-[#0056b3] font-bold hover:underline">Daftar Sekarang</Link>
           </p>
