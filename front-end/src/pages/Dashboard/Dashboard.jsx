@@ -727,7 +727,7 @@ const Dashboard = () => {
     }
 
     if (transactionForm.type === 'expense' && !transactionForm.budget_category_id) {
-      toast.error('Pilih kategori pengeluaran. Gunakan Lainnya jika belum ada yang cocok.');
+      toast.error('Buat atau pilih kategori pengeluaran terlebih dahulu.');
       return;
     }
 
@@ -999,14 +999,16 @@ const Dashboard = () => {
       return;
     }
 
-    if (selectedBudgetItem.category_name === 'Lainnya') {
+    if (!isGuest && selectedBudgetItem.category_name === 'Lainnya') {
       toast.error('Kategori Lainnya tidak bisa dihapus.');
       return;
     }
 
     openConfirmDialog({
       title: `Hapus kategori ${selectedBudgetItem.category_name}?`,
-      description: 'Transaksi lama tidak akan hilang. Semua transaksi pada kategori ini akan dipindahkan ke Lainnya.',
+      description: isGuest
+        ? 'Transaksi lama tidak akan hilang. Kategori pada transaksi lama akan dikosongkan.'
+        : 'Transaksi lama tidak akan hilang. Semua transaksi pada kategori ini akan dipindahkan ke Lainnya.',
       confirmLabel: 'Hapus Kategori',
       tone: 'danger',
       onConfirm: async () => {
@@ -1020,7 +1022,9 @@ const Dashboard = () => {
             await axios.delete(`${API_URL}/budget-categories/${selectedBudgetItem.category_id}`, authHeaders);
           }
           toast.dismiss(loadingToast);
-          toast.success('Kategori berhasil dihapus. Transaksi lama dipindahkan ke Lainnya.');
+          toast.success(isGuest
+            ? 'Kategori berhasil dihapus. Transaksi lama tetap tersimpan tanpa kategori.'
+            : 'Kategori berhasil dihapus. Transaksi lama dipindahkan ke Lainnya.');
           closeBudgetModal();
           await Promise.all([fetchBudgetCategories(), fetchBudgets(), fetchTransactions()]);
         } catch (error) {
@@ -2039,14 +2043,23 @@ const Dashboard = () => {
                   }
                   disabled={Boolean(selectedBudgetItem?.budget_id)}
                   className="h-11 w-full rounded-lg border border-[#d6dfef] bg-white px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
-                  required
+                  required={budgetCategories.length > 0}
                 >
-                  {budgetCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
+                  {budgetCategories.length > 0 ? (
+                    budgetCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Buat kategori dulu</option>
+                  )}
                 </select>
+                {budgetCategories.length === 0 && (
+                  <p className="mt-2 text-xs text-amber-600">
+                    Belum ada kategori. Tutup modal ini lalu tekan Kategori baru untuk membuat kategori anggaran.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -2085,7 +2098,7 @@ const Dashboard = () => {
                 </button>
               )}
 
-              {selectedBudgetItem?.category_id && selectedBudgetItem?.category_name !== 'Lainnya' && (
+              {selectedBudgetItem?.category_id && (isGuest || selectedBudgetItem?.category_name !== 'Lainnya') && (
                 <button
                   type="button"
                   onClick={handleDeleteBudgetCategory}
@@ -2283,13 +2296,17 @@ const Dashboard = () => {
                     className="h-10 w-full rounded-lg border border-[#d6dfef] bg-white px-3 text-sm outline-none focus:border-[#0056b3] focus:ring-2 focus:ring-blue-100"
                     value={transactionForm.budget_category_id}
                     onChange={(event) => updateTransactionForm('budget_category_id', event.target.value)}
-                    required={transactionForm.type === 'expense'}
+                    required={transactionForm.type === 'expense' && budgetCategories.length > 0}
                   >
-                    {budgetCategories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
+                    {budgetCategories.length > 0 ? (
+                      budgetCategories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="">Buat kategori dulu</option>
+                    )}
                   </select>
                 </div>
               )}

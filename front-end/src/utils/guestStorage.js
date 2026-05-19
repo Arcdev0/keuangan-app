@@ -4,7 +4,7 @@ const GUEST_MODE_KEY = 'app_mode';
 
 const stores = ['wallets', 'budgetCategories', 'budgets', 'transactions'];
 
-const defaultCategories = [
+const legacyDefaultCategories = [
   { name: 'Belanja', icon: 'shopping-bag', color: '#8b5cf6' },
   { name: 'Gaji', icon: 'wallet', color: '#22c55e' },
   { name: 'Lainnya', icon: 'more-horizontal', color: '#64748b' },
@@ -85,16 +85,29 @@ export const stopGuestMode = () => {
 };
 
 export const ensureGuestCategories = async () => {
-  const categories = await getAll('budgetCategories');
+  const [categories, transactions, budgets] = await Promise.all([
+    getAll('budgetCategories'),
+    getAll('transactions'),
+    getAll('budgets'),
+  ]);
 
-  for (const category of defaultCategories) {
-    const exists = categories.some((item) => item.name === category.name && item.is_active !== false);
+  for (const legacyCategory of legacyDefaultCategories) {
+    const category = categories.find((item) => (
+      item.name === legacyCategory.name
+      && item.icon === legacyCategory.icon
+      && item.color === legacyCategory.color
+      && item.is_active !== false
+    ));
 
-    if (!exists) {
-      await addItem('budgetCategories', {
-        ...category,
-        is_active: true,
-      });
+    if (!category) {
+      continue;
+    }
+
+    const isUsed = transactions.some((transaction) => Number(transaction.budget_category_id) === Number(category.id))
+      || budgets.some((budget) => Number(budget.budget_category_id) === Number(category.id));
+
+    if (!isUsed) {
+      await deleteItem('budgetCategories', category.id);
     }
   }
 
@@ -354,17 +367,12 @@ export const guestStorage = {
       return;
     }
 
-    if (category.name === 'Lainnya') {
-      throw new Error('Kategori Lainnya tidak bisa dihapus.');
-    }
-
-    const fallback = categories.find((item) => item.name === 'Lainnya') || await this.addBudgetCategory({ name: 'Lainnya' });
     const transactions = await getAll('transactions');
     const budgets = await getAll('budgets');
 
     for (const transaction of transactions) {
       if (Number(transaction.budget_category_id) === Number(id)) {
-        await putItem('transactions', { ...transaction, budget_category_id: fallback.id });
+        await putItem('transactions', { ...transaction, budget_category_id: null });
       }
     }
 
